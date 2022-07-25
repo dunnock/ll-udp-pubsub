@@ -1,3 +1,5 @@
+Написання простого UDP каналу з мінімальними затримками
+
 # 1. Вимоги та особливості low latency
 
 min(time) != max(throughput)  =>  low latency != high load
