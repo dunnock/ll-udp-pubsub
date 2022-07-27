@@ -1,20 +1,23 @@
 use std::{
     any::Any,
+    hint,
     io::ErrorKind,
     net::{SocketAddr, UdpSocket},
     sync::atomic,
     sync::{atomic::AtomicBool, Arc},
     thread::JoinHandle,
-    time::Duration, hint,
+    time::Duration,
 };
 
-use crate::{timestamp, Handler, MTU};
+use crate::{timestamp, Handler, Packet, MTU};
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_millis(1_000);
 
 pub struct UdpSubscriberConfig {
     pub client_addr: SocketAddr,
     pub read_timeout: Duration,
+    /// Drop events which came out of sequence
+    pub drop_out_of_sequence: bool,
 }
 
 impl UdpSubscriberConfig {
@@ -22,6 +25,7 @@ impl UdpSubscriberConfig {
         Self {
             client_addr,
             read_timeout: DEFAULT_READ_TIMEOUT,
+            drop_out_of_sequence: false,
         }
     }
 }
@@ -79,11 +83,17 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
             .unwrap();
 
         let mut buf = [0u8; MTU];
+        let last_server_ts = 0;
         loop {
             match self.sock.recv(&mut buf) {
                 Ok(len) => {
                     let ts = timestamp();
-                    let msg: MessageHandler::Message = bincode::deserialize(&buf[..len]).unwrap();
+                    let msg: Packet<MessageHandler::Message> =
+                        bincode::deserialize(&buf[..len]).unwrap();
+                    if self.config.drop_out_of_sequence && last_server_ts > msg.sent_ts {
+                        continue;
+                    }
+                    // Pass message packet to handler
                     self.handler.handle(msg, ts);
                 }
                 Err(err)

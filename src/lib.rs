@@ -1,9 +1,34 @@
-use serde::Deserialize;
+use std::{
+    net::SocketAddr,
+    sync::{atomic::AtomicI64, Arc},
+};
+
+use serde::{Deserialize, Serialize};
 
 const MTU: usize = 1500;
 
 pub mod publisher;
+pub mod publisher_controller;
 pub mod subscriber;
+
+#[derive(Serialize, Deserialize)]
+pub enum ControlMessage {
+    Subscribe,
+    Unsubscribe,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Packet<Message> {
+    pub data: Message,
+    pub sent_ts: i64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ChannelMetrics {
+    last_submit: Arc<AtomicI64>,
+}
+
+type Recipients = Arc<scc::HashIndex<SocketAddr, ChannelMetrics>>;
 
 ///
 /// Get current system time in nanoseconds.
@@ -20,5 +45,5 @@ pub fn timestamp() -> i64 {
 /// Message handler for subscriber
 pub trait Handler {
     type Message: for<'de> Deserialize<'de>;
-    fn handle(&mut self, msg: Self::Message, received_ts: i64);
+    fn handle(&mut self, msg: Packet<Self::Message>, received_ts: i64);
 }

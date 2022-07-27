@@ -2,7 +2,7 @@ use bytes::BufMut;
 use serde::Serialize;
 use std::net::{SocketAddr, UdpSocket};
 
-use crate::MTU;
+use crate::{timestamp, Packet, MTU};
 
 ///
 /// Send serializable binary message to multiple recipients
@@ -36,12 +36,20 @@ impl UdpPublisher {
         recipients: Recipients,
     ) -> Result<(), std::io::Error> {
         let mut writer = self.buf.writer();
-        bincode::serialize_into(&mut writer, &msg).unwrap();
+        let packet = Packet {
+            data: msg,
+            sent_ts: timestamp(),
+        };
+        bincode::serialize_into(&mut writer, &packet).unwrap();
         let len = MTU - writer.get_ref().len();
         for addr in recipients {
             let sent = self.sock.send_to(&self.buf[..len], addr)?;
             assert_eq!(sent, len, "Expected whole packet to be sent");
         }
         Ok(())
+    }
+
+    pub(crate) fn sock(&self) -> &UdpSocket {
+        &self.sock
     }
 }

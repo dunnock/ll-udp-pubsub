@@ -1,22 +1,28 @@
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
 use clap::Parser;
 use ll_udp_pubsub::{
     subscriber::{UdpSubscriber, UdpSubscriberConfig},
-    Handler, Packet,
+    ControlMessage, Handler, Packet,
 };
 
 #[derive(clap::Parser)]
 /// Receive counters with specified timeout
 struct Cmd {
+    /// Address where publisher controller is listening
+    #[clap(short = 's')]
+    server_addr: SocketAddr,
     /// Address where client is listening
     #[clap(short = 'c')]
     client_addr: SocketAddr,
-    /// Number of messages to send
+    /// Number of messages to receive
     #[clap(short = 'n', default_value = "100")]
     number: usize,
     /// Non-blocking receive
@@ -55,13 +61,37 @@ fn main() {
     subscriber.set_nonblocking(opts.non_blocking).unwrap();
     let subscriber_handle = subscriber.spawn().unwrap();
 
+    // Messy implementation of controller for subscriber, just for illustration purposes
+    let shutdown_controller = Arc::new(AtomicBool::default());
+    let shutdown = shutdown_controller.clone();
+    let server_socket = subscriber_handle.socket().try_clone().unwrap();
+    let controller_handle = std::thread::spawn(move || {
+        if let Err(err) = server_socket.connect(opts.server_addr) {
+            shutdown.store(true, Ordering::Relaxed);
+            log::error!("Failed to connect to {} {err}", opts.server_addr);
+        }
+        let subscribe = bincode::serialize(&ControlMessage::Subscribe).unwrap();
+        while !shutdown.load(Ordering::Relaxed) {
+            if let Err(err) = server_socket.send(&subscribe) {
+                shutdown.store(true, Ordering::Relaxed);
+                log::error!("Failed to receive message {err}");
+            }
+            std::thread::sleep(Duration::from_secs(15));
+        }
+    });
+
     // Wait until client receives expected number of messages
     while receiver.messages.lock().unwrap().len() < opts.number {
+        if shutdown_controller.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(1_000));
     }
 
-    // Stop subscriber
+    // Stop subscriber and controller
+    shutdown_controller.store(true, Ordering::Relaxed);
     subscriber_handle.shutdown().unwrap();
+    controller_handle.join().unwrap();
 
     // Print out csv with results
     println!("id,sent_ts,received_ts");
