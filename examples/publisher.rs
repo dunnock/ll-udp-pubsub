@@ -12,9 +12,6 @@ struct Cmd {
     /// Timeout to send messages in microseconds
     #[clap(short = 't', default_value = "1000")]
     timeout_micros: u64,
-    /// Number of messages to send
-    #[clap(short = 'n', default_value = "100")]
-    number: usize,
     /// Non-blocking socket for publisher
     #[clap(long = "non-blocking")]
     non_blocking: bool,
@@ -32,7 +29,7 @@ fn main() {
     let handle = ctl.spawn().unwrap();
 
     let timeout = Duration::from_micros(opts.timeout_micros);
-    for i in 1..=opts.number {
+    for i in 0..i64::MAX {
         publisher.send(i).unwrap();
         std::thread::sleep(timeout);
     }
