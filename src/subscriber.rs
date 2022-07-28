@@ -37,17 +37,17 @@ pub struct UdpSubscriber<MessageHandler> {
     handler: MessageHandler,
 }
 
-pub struct UdpSubscriberHandle {
-    handle: JoinHandle<()>,
+pub struct UdpSubscriberHandle<MessageHandler> {
+    handle: JoinHandle<MessageHandler>,
     shutdown: Arc<AtomicBool>,
     sock: UdpSocket,
 }
 
-impl UdpSubscriberHandle {
-    pub fn join(self) -> Result<(), Box<dyn Any + Send + 'static>> {
+impl<MessageHandler> UdpSubscriberHandle<MessageHandler> {
+    pub fn join(self) -> Result<MessageHandler, Box<dyn Any + Send + 'static>> {
         self.handle.join()
     }
-    pub fn shutdown(self) -> Result<(), Box<dyn Any + Send + 'static>> {
+    pub fn shutdown(self) -> Result<MessageHandler, Box<dyn Any + Send + 'static>> {
         self.shutdown.store(true, atomic::Ordering::Relaxed);
         self.join()
     }
@@ -75,7 +75,7 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
         self.sock.set_nonblocking(nonblocking)
     }
 
-    pub fn run(mut self) {
+    pub fn run(mut self) -> MessageHandler {
         // Blocking way of polling socket
         assert!(!self.config.read_timeout.is_zero());
         self.sock
@@ -108,11 +108,13 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
 
             hint::spin_loop();
         }
+
+        self.handler
     }
 }
 
 impl<MessageHandler: Handler + Send + 'static> UdpSubscriber<MessageHandler> {
-    pub fn spawn(self) -> Result<UdpSubscriberHandle, std::io::Error> {
+    pub fn spawn(self) -> Result<UdpSubscriberHandle<MessageHandler>, std::io::Error> {
         let shutdown = self.shutdown_flag.clone();
         let sock = self.sock.try_clone().unwrap();
 

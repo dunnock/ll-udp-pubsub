@@ -18,6 +18,7 @@ struct Cmd {
 }
 
 fn main() {
+    env_logger::try_init().ok();
     let opts = Cmd::parse();
     let config = PublisherControllerConfig {
         subscription_timeout: Duration::from_secs(30),

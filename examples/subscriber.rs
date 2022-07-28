@@ -1,8 +1,8 @@
 use std::{
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
     },
     time::Duration,
 };
@@ -36,16 +36,18 @@ struct Msg {
     received_ts: i64,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct Receiver {
-    messages: Arc<Mutex<Vec<Msg>>>,
+    messages: Vec<Msg>,
+    count: Arc<AtomicUsize>,
 }
 
 impl Handler for Receiver {
     type Message = i64;
 
     fn handle(&mut self, msg: Packet<Self::Message>, received_ts: i64) {
-        self.messages.lock().unwrap().push(Msg {
+        self.count.fetch_add(1, Ordering::Relaxed);
+        self.messages.push(Msg {
             id: msg.data,
             sent_ts: msg.sent_ts,
             received_ts,
@@ -54,10 +56,12 @@ impl Handler for Receiver {
 }
 
 fn main() {
+    env_logger::try_init().ok();
     let opts = Cmd::parse();
     let subscriber_config = UdpSubscriberConfig::new(opts.client_addr);
     let receiver = Receiver::default();
-    let mut subscriber = UdpSubscriber::new(subscriber_config, receiver.clone()).unwrap();
+    let messages_count = receiver.count.clone();
+    let mut subscriber = UdpSubscriber::new(subscriber_config, receiver).unwrap();
     subscriber.set_nonblocking(opts.non_blocking).unwrap();
     let subscriber_handle = subscriber.spawn().unwrap();
 
@@ -76,22 +80,28 @@ fn main() {
                 shutdown.store(true, Ordering::Relaxed);
                 log::error!("Failed to receive message {err}");
             }
-            std::thread::sleep(Duration::from_secs(15));
+            std::thread::sleep(Duration::from_secs(1));
         }
     });
 
     // Wait until client receives expected number of messages
-    while receiver.messages.lock().unwrap().len() < opts.number {
+    while messages_count.load(Ordering::Relaxed) < opts.number {
+        log::debug!(
+            "Received {} messages",
+            messages_count.load(Ordering::Relaxed)
+        );
         if shutdown_controller.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
-        std::thread::sleep(Duration::from_millis(1_000));
+        std::thread::sleep(Duration::from_millis(1000));
     }
 
     // Stop subscriber and controller
     shutdown_controller.store(true, Ordering::Relaxed);
-    subscriber_handle.shutdown().unwrap();
+    let result = subscriber_handle.shutdown().unwrap();
+    log::info!("Subscriber was shutdown");
     controller_handle.join().unwrap();
+    log::info!("Controller was shutdown");
 
     // Print out csv with results
     println!("id,sent_ts,received_ts");
@@ -99,7 +109,7 @@ fn main() {
         id,
         sent_ts,
         received_ts,
-    } in receiver.messages.lock().unwrap().iter()
+    } in result.messages
     {
         println!("{id},{sent_ts},{received_ts}");
     }
