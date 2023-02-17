@@ -29,25 +29,7 @@ transition: slide-left
 css: unocss
 ---
 
-# Welcome to Slidev
-
-Presentation slides for developers
-
-<div class="pt-12">
-  <span @click="$slidev.nav.next" class="px-2 py-1 rounded cursor-pointer" hover="bg-white bg-opacity-10">
-    Press Space for next page <carbon:arrow-right class="inline"/>
-  </span>
-</div>
-
-<div class="abs-br m-6 flex gap-2">
-  <button @click="$slidev.nav.openInEditor()" title="Open in Editor" class="text-xl slidev-icon-btn opacity-50 !border-none !hover:text-white">
-    <carbon:edit />
-  </button>
-  <a href="https://github.com/slidevjs/slidev" target="_blank" alt="GitHub"
-    class="text-xl slidev-icon-btn opacity-50 !border-none !hover:text-white">
-    <carbon-logo-github />
-  </a>
-</div>
+# Побудова мережевого каналу з мінімальними затримками
 
 <!--
 The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)
@@ -76,7 +58,6 @@ loop {
 ```
 
 ```rust {none}
-use std::net::ErrorKind
 let sock: std::net::UdpSocket
 ```
 
@@ -100,19 +81,75 @@ loop {
 
 ```
 
+```rust {none}
+use std::net::ErrorKind
+```
+
+
+[std::hint::spin_loop()](https://doc.rust-lang.org/std/hint/fn.spin_loop.html)
+> Upon receiving the spin-loop signal the processor can optimize its behavior by, for example, saving power or switching hyper-threads.
+
+
 </template>
 
-<style>
-.footnotes-sep {
-  @apply mt-20 opacity-10;
-}
-.footnotes {
-  @apply text-sm opacity-75;
-}
-.footnote-backref {
-  display: none;
-}
-</style>
+---
+transition: fade
+---
+
+## В наявних бібліотеках
+
+[crossbeam-channel](https://github.com/crossbeam-rs/crossbeam/blob/23b10f2b737b6b6b66f5ca224cab2568350940b0/crossbeam-channel/src/flavors/array.rs#L396)
+```rust
+    pub(crate) fn recv(&self, deadline: Option<Instant>) -> Result<T, RecvTimeoutError> {
+        loop {
+            // Try receiving a message several times.
+            loop {
+                if self.start_recv(token) {
+                    ... return token.read();
+                }
+                ...
+                if backoff.is_completed() {
+                    break;
+                } else {
+                    backoff.snooze();
+                }
+            }
+            ...
+            // Block the current thread.
+            let sel = cx.wait_until(deadline);
+            ...
+        }
+     }
+```
+
+---
+
+## В наявних бібліотеках
+
+[crossbeam-utils::backoff](https://github.com/crossbeam-rs/crossbeam/blob/23b10f2b737b6b6b66f5ca224cab2568350940b0/crossbeam-utils/src/backoff.rs#L209)
+```rust {1,2,3,5,8}
+    pub fn snooze(&self) {
+        if self.step.get() <= SPIN_LIMIT {
+            for _ in 0..1 << self.step.get() {
+                #[allow(deprecated)]
+                atomic::spin_loop_hint();
+            }
+        } else {
+            ::std::thread::yield_now();
+        }
+        if self.step.get() <= YIELD_LIMIT {
+            self.step.set(self.step.get() + 1);
+        }
+    }
+```
+
+```rust {3}
+    pub(crate) fn recv(&self, deadline: Option<Instant>) -> Result<T, RecvTimeoutError> {
+        loop {
+           ... backoff.snooze(); ...
+        }
+     }
+```
 
 ---
 

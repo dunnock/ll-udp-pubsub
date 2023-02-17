@@ -1,6 +1,5 @@
 use std::{
     any::Any,
-    hint,
     io::ErrorKind,
     net::{SocketAddr, UdpSocket},
     sync::atomic,
@@ -106,7 +105,8 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
                 break;
             }
 
-            hint::spin_loop();
+            //std::thread::yield_now();
+            std::hint::spin_loop();
         }
 
         self.handler
