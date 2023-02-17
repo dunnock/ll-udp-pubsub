@@ -23,6 +23,7 @@ struct Cmd {
 fn main() {
     let opts = Cmd::parse();
     let mut publisher = UdpPublisher::new(opts.server_addr).unwrap();
+    publisher.set_nonblocking(true).unwrap();
     let recipients = vec![opts.client_addr];
     let timeout = Duration::from_micros(opts.timeout_micros);
     for i in 1..=opts.number {
