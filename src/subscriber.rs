@@ -105,7 +105,9 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
                 break;
             }
 
-            //std::thread::yield_now();
+            #[cfg(feature="cooperative_waiting")]
+            std::thread::yield_now();
+            #[cfg(not(feature="cooperative_waiting"))]
             std::hint::spin_loop();
         }
 
