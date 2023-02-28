@@ -41,3 +41,6 @@ src: ./pages/4-1-event-loop.md
 ---
 src: ./pages/4-2-context-switching.md
 ---
+---
+src: ./pages/4-3-crossbeam.md
+---
