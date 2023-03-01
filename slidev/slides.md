@@ -44,3 +44,9 @@ src: ./pages/4-2-context-switching.md
 ---
 src: ./pages/4-3-crossbeam.md
 ---
+---
+src: ./pages/4-4-cooperative-loop.md
+---
+---
+src: ./pages/4-5-busy-loop.md
+---

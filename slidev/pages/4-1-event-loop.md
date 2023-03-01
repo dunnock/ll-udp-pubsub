@@ -2,9 +2,8 @@
 title: Traditional event-loop
 ---
 
-```rust {3-6}
+```rust
 let channel: std::net::UdpSocket;
-//...
 loop {
     match channel.recv(&mut buf) /* .await */ {
         Ok(len) => handle_message(&buf[..len]),
