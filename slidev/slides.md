@@ -35,6 +35,19 @@ css: unocss
 The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)
 -->
 
+
+---
+src: ./pages/1-motivation.md
+---
+---
+src: ./pages/2-low-latency.md
+---
+---
+src: ./pages/3-why-udp.md
+---
+---
+src: ./pages/4-1-event-loop.md
+---
 ---
 src: ./pages/4-1-event-loop.md
 ---

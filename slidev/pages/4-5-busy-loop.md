@@ -2,7 +2,7 @@
 title: Busy loop
 ---
 
-```rust {3-6}
+```rust {all|10}
 let sock: std::net::UdpSocket;
 sock.set_nonblocking(true);
 loop {

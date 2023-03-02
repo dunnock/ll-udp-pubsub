@@ -44,3 +44,5 @@ pub fn snooze(&self) {
     }
 }
 ```
+
+[sched_yield](https://man7.org/linux/man-pages/man2/sched_yield.2.html)

@@ -2,7 +2,7 @@
 title: Cooperative event-loop
 ---
 
-```rust {all|}
+```rust {all|2-4|6-7|10}
 let sock: std::net::UdpSocket;
 sock.set_nonblocking(true);
 loop {
@@ -15,8 +15,6 @@ loop {
     std::thread::yield_now();
 }
 ```
-
-[sched_yield](https://man7.org/linux/man-pages/man2/sched_yield.2.html)
 
 <!--
 Спробуємо варіант кооперативного шедулінга, оскільки його рекомендують розробники лінукса
