@@ -1,15 +1,13 @@
 ---
 # try also 'default' to start simple
-theme: seriph
-# random image from a curated Unsplash collection by Anthony
-# like them? see https://unsplash.com/collections/94734566/slidev
-background: https://source.unsplash.com/collection/94734566/1920x1080
+theme: apple-basic
+# eloc
 # apply any windi css classes to the current slide
 class: 'text-center'
 # https://sli.dev/custom/highlighters.html
 highlighter: shiki
 # show line numbers in code blocks
-lineNumbers: false
+lineNumbers: true
 # some information about the slides, markdown enabled
 info: |
   ## Побудова мережевого каналу з мінімальними затримками
@@ -20,16 +18,20 @@ info: |
   Такий канал може використовуватись в застосунках де важлива
   реакція на події, які відбуваються в локальному мережевому середовищі,
   в межах до 50 мікросекунд.
-# persist drawings in exports and build
-drawings:
-  persist: false
-# page transition
-transition: slide-left
+
 # use UnoCSS
 css: unocss
+
+layout: intro-image-right
+image: ./static/racing.jpeg
 ---
 
-# Побудова мережевого каналу з мінімальними затримками
+# Building low latency networking channel
+
+__Maxim Vorobjov__
+
+__Volition Technologies__
+
 
 <!--
 The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)
@@ -45,9 +47,12 @@ src: ./pages/2-low-latency.md
 ---
 src: ./pages/3-why-udp.md
 ---
+
 ---
-src: ./pages/4-1-event-loop.md
+layout: section
 ---
+# Implementation
+
 ---
 src: ./pages/4-1-event-loop.md
 ---

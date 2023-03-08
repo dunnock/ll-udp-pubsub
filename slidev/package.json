@@ -8,8 +8,12 @@
   },
   "dependencies": {
     "@slidev/cli": "^0.40.3",
+    "@slidev/theme-apple-basic": "^0.20.0",
     "@slidev/theme-default": "*",
     "@slidev/theme-seriph": "*",
-    "qrcode.vue": "^3.3.3"
+    "qrcode.vue": "^3.3.3",
+    "slidev-theme-dracula": "^0.1.0",
+    "slidev-theme-dualboot": "^0.4.0",
+    "slidev-theme-eloc": "^1.0.1"
   }
 }

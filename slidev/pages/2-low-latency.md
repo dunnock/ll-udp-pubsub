@@ -1,15 +1,11 @@
 ---
-title: Low latency application specifics
+title: Assumptions
+layout: center
 ---
 
-Low latency: optimize min(time)
-Usual application: max(throughput)
+# Assumptions
 
-Low latency != high load
-
-- Events represent remote system state update
-- Message value significantly reduces with time
-- Sequence is not very important
+- Sequence is less important than time
 - Allowance for losing messages
 
 <!--
@@ -19,14 +15,20 @@ Low latency != high load
 
 ---
 title: Building low latency system
+layout: center
 ---
 
-1. Використовувати протокол з мінімальними гарантіями
-2. Використовувати мінімум рівней, меньше коду, більше контролю
-- Стандартна бібліотека по можливості
-3. Обійти системний планувальник
-4. Trade-off із мінімальним часом затримки
-- Загальні бібліотеки орієнтуються на пропускну способність, не на затримки
-5. Різні хаки на рівні ОС та коду:
-> core affinity, memory alignment, process sched priority, less branching
-6. Profiling
+Nothing comes for free 
+> except zero cost abstractions
+
+---
+title: Building low latency system
+layout: center
+---
+
+# Implementation strategy
+
+- Use protocol with minimum required guarantees
+- Obtain full control over the execution
+- Work around system scheduler
+

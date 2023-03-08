@@ -1,6 +1,9 @@
 ---
 title: Traditional event-loop
+layout: center
 ---
+
+# Traditional event-loop
 
 ```rust
 let channel: std::net::UdpSocket;
@@ -11,8 +14,6 @@ loop {
     }
 }
 ```
-
-MTU = 1500b
 
 [bincode](https://docs.rs/bincode/latest/bincode/)
 
@@ -31,6 +32,7 @@ MTU = 1500b
 
 ---
 title: Traditional event-loop
+layout: center
 ---
 
 ## Measurement method
@@ -45,15 +47,12 @@ flowchart LR
 </p>
 
 <!--
-Хочемо поміряти те на що ми можемо вплинути
-
-Оптимізацию мережі лишимо для інших
-
-Дозволяє точно вимірювати час до десятків наносекунд
+Дуже коротко
 -->
 
 ---
 title: Traditional event-loop
+layout: center
 ---
 
 ## Measurement results
@@ -71,7 +70,10 @@ title: Traditional event-loop
 
 ---
 title: Traditional event-loop
+layout: center
 ---
+
+# Where is our time spent?
 
 ```rust {1,4}
 let channel: std::net::UdpSocket;
