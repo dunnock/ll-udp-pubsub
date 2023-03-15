@@ -105,9 +105,9 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
                 break;
             }
 
-            #[cfg(feature="cooperative_waiting")]
+            #[cfg(feature = "cooperative_waiting")]
             std::thread::yield_now();
-            #[cfg(not(feature="cooperative_waiting"))]
+            #[cfg(not(feature = "cooperative_waiting"))]
             std::hint::spin_loop();
         }
 
@@ -116,13 +116,21 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
 }
 
 impl<MessageHandler: Handler + Send + 'static> UdpSubscriber<MessageHandler> {
-    pub fn spawn(self) -> Result<UdpSubscriberHandle<MessageHandler>, std::io::Error> {
+    pub fn spawn(
+        self,
+        bind_to_core: Option<usize>,
+    ) -> Result<UdpSubscriberHandle<MessageHandler>, std::io::Error> {
         let shutdown = self.shutdown_flag.clone();
         let sock = self.sock.try_clone().unwrap();
 
         let handle = std::thread::Builder::new()
-            .name(format!("UDP subscriber {}", self.config.client_addr))
-            .spawn(move || self.run())?;
+            .name(format!("udp_sub:{}", self.config.client_addr))
+            .spawn(move || {
+                if let Some(core) = bind_to_core {
+                    crate::pin_to_core(core);
+                }
+                self.run()
+            })?;
 
         Ok(UdpSubscriberHandle {
             handle,

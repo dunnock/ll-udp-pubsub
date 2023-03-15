@@ -14,14 +14,17 @@ use ll_udp_pubsub::{
 /// Receive counters with specified timeout
 struct Cmd {
     /// Address where client is listening
-    #[clap(short = 'c')]
+    #[arg(short = 'c')]
     client_addr: SocketAddr,
-    /// Number of messages to send
-    #[clap(short = 'n', default_value = "100")]
+    /// Number of messages to receive
+    #[arg(short = 'n', default_value = "100")]
     number: usize,
     /// Non-blocking receive
-    #[clap(long = "non-blocking")]
+    #[arg(long = "non-blocking")]
     non_blocking: bool,
+    /// Pin subscriber to core
+    #[arg(long = "core", env = "RECEIVER_CORE")]
+    core: Option<usize>,
 }
 
 struct Msg {
@@ -53,7 +56,7 @@ fn main() {
     let receiver = Receiver::default();
     let mut subscriber = UdpSubscriber::new(subscriber_config, receiver.clone()).unwrap();
     subscriber.set_nonblocking(opts.non_blocking).unwrap();
-    let subscriber_handle = subscriber.spawn().unwrap();
+    let subscriber_handle = subscriber.spawn(opts.core).unwrap();
 
     // Wait until client receives expected number of messages
     while receiver.messages.lock().unwrap().len() < opts.number {

@@ -18,12 +18,18 @@ struct Cmd {
     /// Number of messages to send
     #[clap(short = 'n', default_value = "100")]
     number: usize,
+    /// Pin sender to core
+    #[arg(long = "core", env = "SENDER_CORE")]
+    core: Option<usize>,
 }
 
 fn main() {
     let opts = Cmd::parse();
     let mut publisher = UdpPublisher::new(opts.server_addr).unwrap();
     publisher.set_nonblocking(true).unwrap();
+    if let Some(core) = opts.core {
+        ll_udp_pubsub::pin_to_core(core);
+    }
     let recipients = vec![opts.client_addr];
     let timeout = Duration::from_micros(opts.timeout_micros);
     for i in 1..=opts.number {

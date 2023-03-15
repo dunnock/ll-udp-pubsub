@@ -1,4 +1,11 @@
 ---
+title: Why do we use Rust
+layout: fact
+---
+
+Rust handles most of technical risks for us providing access to native low level control over execution
+
+---
 title: Low latency application specifics
 layout: fact
 ---

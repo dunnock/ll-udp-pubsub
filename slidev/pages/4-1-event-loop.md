@@ -42,6 +42,7 @@ layout: center
 ```mermaid
 flowchart LR
     Sender -->|time sent| Receiver -->|time received| tdiff[Time diff]
+    Sender -->|every 1ms| Sender
 ```
 
 </p>

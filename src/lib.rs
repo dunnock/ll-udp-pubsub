@@ -47,3 +47,15 @@ pub trait Handler {
     type Message: for<'de> Deserialize<'de>;
     fn handle(&mut self, msg: Packet<Self::Message>, received_ts: i64);
 }
+
+/// Pin current thread to core
+/// Note: all the created threads will inherit taskset
+pub fn pin_to_core(core_idx: usize) {
+    let cores = core_affinity::get_core_ids().expect("Failed to get list of cores");
+    assert!(
+        cores.len() > core_idx,
+        "{core_idx} core is not available, cores.len()={}",
+        cores.len()
+    );
+    core_affinity::set_for_current(cores[core_idx]);
+}

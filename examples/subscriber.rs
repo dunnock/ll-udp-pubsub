@@ -28,6 +28,9 @@ struct Cmd {
     /// Non-blocking receive
     #[clap(long = "non-blocking")]
     non_blocking: bool,
+    /// Pin subscriber to core
+    #[arg(long = "core", env = "SUBSCRIBER_CORE")]
+    core: Option<usize>,
 }
 
 struct Msg {
@@ -63,7 +66,7 @@ fn main() {
     let messages_count = receiver.count.clone();
     let mut subscriber = UdpSubscriber::new(subscriber_config, receiver).unwrap();
     subscriber.set_nonblocking(opts.non_blocking).unwrap();
-    let subscriber_handle = subscriber.spawn().unwrap();
+    let subscriber_handle = subscriber.spawn(opts.core).unwrap();
 
     // Messy implementation of controller for subscriber, just for illustration purposes
     let shutdown_controller = Arc::new(AtomicBool::default());
