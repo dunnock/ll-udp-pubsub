@@ -3,14 +3,14 @@ title: Why do we use Rust
 layout: fact
 ---
 
-Rust handles most of technical risks for us providing access to native low level control over execution
+Rust is ideal choice for low latency, it handles technical risks without sacrificing performance and provides access to native low level control over execution.
 
 ---
 title: Low latency application specifics
 layout: fact
 ---
 
-Low latency is ...
+Lower latency refers to a minimal delay in the processing of messages delivered via network.
 
 `Low latency` ≠ ` High load `
 
