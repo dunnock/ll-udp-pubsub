@@ -7,15 +7,22 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build --release --example receive --target x86_64-unknown-linux-gnu
+RUN --mount=type=cache,target=/app/target \
+    cp /app/target/x86_64-unknown-linux-gnu/release/examples/receive /app/receive
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build --release --example send --target x86_64-unknown-linux-gnu
 RUN --mount=type=cache,target=/app/target \
     cp /app/target/x86_64-unknown-linux-gnu/release/examples/send /app/send
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --features cooperative_waiting \
+    --example receive --target x86_64-unknown-linux-gnu
 RUN --mount=type=cache,target=/app/target \
-    cp /app/target/x86_64-unknown-linux-gnu/release/examples/receive /app/receive
+    cp /app/target/x86_64-unknown-linux-gnu/release/examples/receive /app/receive-coop
 
 FROM scratch AS export-stage
 
 COPY --from=rust-build-stage /app/send /bin/send
 COPY --from=rust-build-stage /app/receive /bin/receive
+COPY --from=rust-build-stage /app/receive-coop /bin/receive-coop

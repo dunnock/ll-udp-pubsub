@@ -1,4 +1,14 @@
 ---
+title: Agenda
+layout: center
+---
+
+- Low latency domain
+- Assumptions and considerations
+- Implementation and measurement
+- Using ll-udp-pubsub library
+
+---
 title: Why do we use Rust
 layout: fact
 ---
@@ -10,7 +20,7 @@ title: Low latency application specifics
 layout: fact
 ---
 
-Lower latency refers to a minimal delay in the processing of messages delivered via network.
+Low latency refers to the short amount of time it takes for a signal or data to travel from one point to another in a system
 
 `Low latency` ≠ ` High load `
 
@@ -45,7 +55,7 @@ layout: center
 - HFT
 - RTB
 - IoT
-- Other realtime systems
+- Other realtime applications
 
 
 <!-- не коментувати чьому -->

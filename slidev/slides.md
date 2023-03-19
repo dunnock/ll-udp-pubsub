@@ -34,6 +34,17 @@ __Volition Technologies__
 
 
 ---
+title: About me
+---
+
+# About me
+
+- 5+ years with Rust
+- 3 years in HFT
+- C++, Python, JavaScript in background
+- https://github.com/dunnock/ll-udp-pubsub
+
+---
 src: ./pages/1-motivation.md
 ---
 ---
