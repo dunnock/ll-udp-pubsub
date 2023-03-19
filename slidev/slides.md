@@ -42,7 +42,8 @@ title: About me
 - 5+ years with Rust
 - 3 years in HFT
 - C++, Python, JavaScript in background
-- https://github.com/dunnock/ll-udp-pubsub
+- https://github.com/dunnock
+- @maxsparrow
 
 ---
 src: ./pages/1-motivation.md
@@ -73,4 +74,7 @@ src: ./pages/4-4-cooperative-loop.md
 ---
 ---
 src: ./pages/4-5-busy-loop.md
+---
+---
+TODO: ll-udp-pubsub usage example
 ---
