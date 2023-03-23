@@ -14,10 +14,11 @@ sequenceDiagram
     Note over Linux: packet
   end
   Linux --> Linux: Write packet into buf
-  Linux -->> CPU1: Restore registers
+  Linux --> Linux: Scheduler: run Receiver
+  Linux -->> CPU1: Restore registers and stack
   Linux -->> Receiver: return from recv
   activate Receiver
-  Receiver -->> CPU1: Where is my furniture?
+  Receiver -->> CPU1: deser
   deactivate Receiver
 ```
 
@@ -25,21 +26,49 @@ sequenceDiagram
 title: What every programmmer should know
 ---
 
-# From public sources
+# Want to know more?
 
 - [What Every Programmer Should Know About Memory | Ulrich Drepper | Red Hat Inc](https://akkadia.org/drepper/cpumemory.pdf)
 
 <QRCode href="https://akkadia.org/drepper/cpumemory.pdf"/>
 
 ---
-title: What every programmmer should know
+title: Context switching impact
 ---
 
-# From public sources
+# CS impact
 
-- ~40µs - Our case
+- ~9µs - In our case
 
 - ~8µs - [Linux perf event Features and Overhead | Vincent Weaver | University of Maine](https://web.eece.maine.edu/~vweaver/projects/perf_events/overhead/fastpath2013_perfevents.pdf#page=4)
 
 - ~3µs - [How long does it take to make a context switch? | Tsuna's blog](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
+
+---
+title: Pin to CPU
+---
+
+# Let's pin our receiver to CPU Core
+
+```rust {3}
+let channel: std::net::UdpSocket;
+//...
+core_affinity::set_for_current(core_id);
+loop {
+    match channel.recv(&mut buf) /* .await */ {
+        Ok(len) => handle_message(&buf[..len]),
+        Err(err) => handle_error(err),
+    }
+}
+```
+
+[core_affinity](https://docs.rs/core_affinity/latest/core_affinity/)
+
+---
+title: Measure
+---
+
+# Measure and compare
+
+![Blocking loop pinned to core performance results](static/1_blocking_affinity.png)
 

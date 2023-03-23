@@ -47,6 +47,14 @@ flowchart LR
 
 </p>
 
+```sh
+$ bin/receive -c ${LOCAL_IP}:3000 -n 100000
+```
+
+```sh
+$ bin/send -c ${LOCAL_IP}:3000 -s ${LOCAL_IP}:3001 -t 1000 -n 1000000
+```
+
 <!--
 Дуже коротко
 -->
@@ -58,17 +66,24 @@ layout: center
 
 ## Measurement results
 
-<p>
+![Blocking loop performance results](static/1_blocking.png)
 
-|        |  blocking  |
-|--------|------------|
-| mean   |    9.41µs  |
-| std    |    1.42µs  |
-| p99    |   12.36µs  |
-| min    |    3.54µs🦄|
-| max    |   22.63µs🐌|
+---
+title: Performance counters
+---
 
-</p>
+## Profile
+
+```sh
+$perf stat taskset -c 1-4 bin/receive -c ${LOCAL_IP}:3000 -n 100000 --core 1
+```
+
+```sh
+            339.31 msec task-clock                #    0.003 CPUs utilized          
+            100329      context-switches          #  295.683 K/sec                  
+                 2      cpu-migrations            #    5.894 /sec                   
+               787      page-faults               #    2.319 K/sec                  
+```
 
 ---
 title: Traditional event-loop

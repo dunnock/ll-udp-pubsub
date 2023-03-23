@@ -26,23 +26,45 @@ loop {
 -->
 
 ---
-title: Busy loop
+title: Busy loop performance
 ---
 
 ## Measurement results
 
-<p>
 
-TODO: Measure once again
+![Busy loop performance results](static/3_busy_loop_affinity.png)
 
-|        |  blocking  | cooperative| **busy loop** |
-|--------|------------|------------|------------|
-| mean   |    9.41µs  |    1.92µs  |    1.90µs  |
-| std    |    1.42µs  |    0.19µs  |    0.21µs  |
-| p99    |   12.36µs  |    2.47µs  |    2.53µs  |
-| min    |    3.54µs  |    1.53µs  |    1.53µs🦄|
-| max    |   22.63µs  |   10.62µs  |   13.13µs🐌|
+---
+title: Busy loop performance
+---
 
-> Less is better
+## Compare measurement results
 
-</p>
+![Busy loop performance results comparison](static/3_busy_loop_vs_all.png)
+
+
+---
+title: Busy loop profiling
+---
+
+## Profiling summary
+
+```sh
+$ perf stat taskset -c 1-4 bin/receive -c ${LOCAL_IP}:3000 -n 100000 --non-blocking --core 1
+```
+
+```sh
+         106103.94 msec task-clock                #    1.000 CPUs utilized          
+               253      context-switches          #    2.384 /sec                   
+                 2      cpu-migrations            #    0.019 /sec                   
+               789      page-faults               #    7.436 /sec                   
+```
+
+### previous result:
+
+```sh
+            339.31 msec task-clock                #    0.003 CPUs utilized          
+            100329      context-switches          #  295.683 K/sec                  
+                 2      cpu-migrations            #    5.894 /sec                   
+               787      page-faults               #    2.319 K/sec                  
+```

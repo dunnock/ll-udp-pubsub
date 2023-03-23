@@ -4,8 +4,9 @@ title: Cooperative event-loop
 
 # Use cooperative scheduling
 
-```rust {all|2-4|6-7|10}
+```rust {all|3-5|7-8|11}
 let sock: std::net::UdpSocket;
+core_affinity::set_for_current(core_id);
 sock.set_nonblocking(true);
 loop {
     match sock.recv(&mut buf) {
@@ -29,18 +30,12 @@ title: Cooperative event-loop
 
 ## Measurement results
 
-<p>
+![Cooperative loop performance results](static/2_cooperative_affinity.png)
 
+---
+title: Cooperative event-loop
+---
 
-|        |  blocking  | **cooperative**|
-|--------|------------|------------|
-| mean   |    9.41µs  |    1.92µs  |
-| std    |    1.42µs  |    0.19µs  |
-| p99    |   12.36µs  |    2.47µs  |
-| min    |    3.54µs  |    1.53µs🦄|
-| max    |   22.63µs  |   10.62µs🐌|
+## Compare with blocking
 
-> Less is better
-
-
-</p>
+![Blocking loop performance results](static/2_cooperative_vs_blocking.png)

@@ -10,7 +10,7 @@ for file in sys.argv[1:]:
     print( "|--------|------------|")
     print(f"| mean   |   {results.mean():5.2f}µs  |")
     print(f"| std    |   {results.std():5.2f}µs  |")
-    print(f"| p99    |   {results.quantile(0.99):5.2f}µs  |")
-    print(f"| min    |   {results.min():5.2f}µs🦄|")
-    print(f"| max    |   {results.max():5.2f}µs🐌|")
+    print(f"| p01    |   {results.quantile(0.01):5.2f}µs🦄|")
+    print(f"| p9     |   {results.quantile(0.9):5.2f}µs  |")
+    print(f"| p999   |   {results.quantile(0.999):5.2f}µs🐌|")
  

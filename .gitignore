@@ -1,3 +1,5 @@
 /target
 slidev/node_modules
 *.tar
+**/.ipynb_checkpoints
+data/c6i.4xlarge
