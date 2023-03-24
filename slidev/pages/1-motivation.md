@@ -3,29 +3,37 @@ title: Agenda
 layout: center
 ---
 
-- Low latency domain
-- Assumptions and considerations
-- Implementation and measurement
-- Using ll-udp-pubsub library
+# Teaser
+
+- What is low latency? 🏎
+- What problems are we trying to resolve? 🐉
+- Deep dive to microseconds level 🐠
+- 🦀
 
 ---
-title: Why do we use Rust
-layout: fact
----
-
-Rust is ideal choice for low latency, it handles technical risks without sacrificing performance and provides access to native low level control over execution.
-
----
-title: Low latency application specifics
+title: Low latency
 layout: fact
 ---
 
 Low latency refers to the short amount of time it takes for a signal or data to travel from one point to another in a system
 
-`Low latency` ≠ ` High load `
+---
+title: Low latency
+layout: fact
+---
 
-<table>
-<tr><td align="left" width="60%">
+
+<table border=0>
+<tr><td align="left" width="40%">
+<strong>Low latency</strong>
+</td>
+<td rowspan=2>≠</td>
+<td align="right" width="40%">
+<strong>High load</strong>
+</td>
+</tr>
+<tr>
+<td align="left" width="60%">
 ↓time
 </td>
 <td align="right">
@@ -33,6 +41,13 @@ Low latency refers to the short amount of time it takes for a signal or data to 
 </td>
 </tr>
 </table>
+
+---
+title: Why do we use Rust
+layout: fact
+---
+
+Rust is ideal choice for low latency, it handles technical risks without sacrificing performance and provides access to native low level control over execution.
 
 ---
 title: Event value

@@ -23,16 +23,6 @@ sequenceDiagram
 ```
 
 ---
-title: What every programmmer should know
----
-
-# Want to know more?
-
-- [What Every Programmer Should Know About Memory | Ulrich Drepper | Red Hat Inc](https://akkadia.org/drepper/cpumemory.pdf)
-
-<QRCode href="https://akkadia.org/drepper/cpumemory.pdf"/>
-
----
 title: Context switching impact
 ---
 

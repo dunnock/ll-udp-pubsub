@@ -19,8 +19,14 @@ info: |
   реакція на події, які відбуваються в локальному мережевому середовищі,
   в межах до 50 мікросекунд.
 
+titleTemplate: '%s'
+
+defaults:
+  layout: 'center'
+
 # use UnoCSS
 css: unocss
+style: ./custom.css
 
 layout: intro-image-right
 image: ./static/racing.jpeg
@@ -78,3 +84,13 @@ src: ./pages/4-5-busy-loop.md
 ---
 TODO: ll-udp-pubsub usage example
 ---
+
+---
+title: What every programmmer should know
+---
+
+# Want to know more?
+
+- [What Every Programmer Should Know About Memory | Ulrich Drepper | Red Hat Inc](https://akkadia.org/drepper/cpumemory.pdf)
+
+<QRCode href="https://akkadia.org/drepper/cpumemory.pdf"/>

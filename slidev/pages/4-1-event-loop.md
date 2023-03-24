@@ -84,21 +84,3 @@ $perf stat taskset -c 1-4 bin/receive -c ${LOCAL_IP}:3000 -n 100000 --core 1
                  2      cpu-migrations            #    5.894 /sec                   
                787      page-faults               #    2.319 K/sec                  
 ```
-
----
-title: Traditional event-loop
-layout: center
----
-
-# Where is our time spent?
-
-```rust {1,4}
-let channel: std::net::UdpSocket;
-//...
-loop {
-    match channel.recv(&mut buf) /* .await */ {
-        Ok(len) => handle_message(&buf[..len]),
-        Err(err) => handle_error(err),
-    }
-}
-```

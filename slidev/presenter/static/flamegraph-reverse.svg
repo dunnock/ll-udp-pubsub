@@ -1,0 +1,2049 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="2048" height="418" onload="init(evt)" viewBox="0 0 2048 418" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:8px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:13px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+
+		// use GET parameters to restore a flamegraphs state.
+		var params = get_params();
+		if (params.x && params.y)
+			zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+	}
+
+	// event listeners
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom(true);
+			zoom(target);
+			if (!document.querySelector('.parent')) {
+				// we have basically done a clearzoom so clear the url
+				var params = get_params();
+				if (params.x) delete params.x;
+				if (params.y) delete params.y;
+				history.replaceState(null, null, parse_params(params));
+				unzoombtn.classList.add("hide");
+				return;
+			}
+
+			// set parameters for zoom state
+			var el = target.querySelector("rect");
+			if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+				var params = get_params()
+				params.x = el.attributes._orig_x.value;
+				params.y = el.attributes.y.value;
+				history.replaceState(null, null, parse_params(params));
+			}
+		}
+		else if (e.target.id == "unzoom") clearzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+		else if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function get_params() {
+		var params = {};
+		var paramsarr = window.location.search.substr(1).split('&');
+		for (var i = 0; i < paramsarr.length; ++i) {
+			var tmp = paramsarr[i].split("=");
+			if (!tmp[0] || !tmp[1]) continue;
+			params[tmp[0]]  = decodeURIComponent(tmp[1]);
+		}
+		return params;
+	}
+	function parse_params(params) {
+		var uri = "?";
+		for (var key in params) {
+			uri += key + '=' + encodeURIComponent(params[key]) + '&';
+		}
+		if (uri.slice(-1) == "&")
+			uri = uri.substring(0, uri.length - 1);
+		if (uri == '?')
+			uri = window.location.href.split('?')[0];
+		return uri;
+	}
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 8 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		var sl = t.getSubStringLength(0, txt.length);
+		// check if only whitespace or if we can fit the entire string into width w
+		if (/^ *$/.test(txt) || sl < w)
+			return;
+
+		// this isn't perfect, but gives a good starting point
+		// and avoids calling getSubStringLength too often
+		var start = Math.floor((w/sl) * txt.length);
+		for (var x = start; x > 0; x = x-2) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom(dont_update_text) {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			if(!dont_update_text) update_text(el[i]);
+		}
+		search();
+	}
+	function clearzoom() {
+		unzoom();
+
+		// remove zoom state
+		var params = get_params();
+		if (params.x) delete params.x;
+		if (params.y) delete params.y;
+		history.replaceState(null, null, parse_params(params));
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+		var params = get_params();
+		delete params.s;
+		history.replaceState(null, null, parse_params(params));
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) search(term);
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (term) currentSearchTerm = term;
+
+		var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+		var params = get_params();
+		params.s = currentSearchTerm;
+		history.replaceState(null, null, parse_params(params));
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="2048.0" height="418.0" fill="url(#background)"  />
+<text id="title" x="1024.00" y="16" >Flame Graph</text>
+<text id="details" x="10.00" y="405" > </text>
+<text id="unzoom" x="10.00" y="16" class="hide">Reset Zoom</text>
+<text id="search" x="1938.00" y="16" >Search</text>
+<text id="ignorecase" x="2022.00" y="16" >ic</text>
+<text id="matched" x="1938.00" y="405" > </text>
+<g id="frames">
+<g >
+<title>entry_SYSCALL_64_after_hwframe (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="249" width="19.8" height="15.0" fill="rgb(224,148,22)" rx="2" ry="2" />
+<text  x="1229.65" y="259.5" >en..</text>
+</g>
+<g >
+<title>inet_recvmsg (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="345" width="32.0" height="15.0" fill="rgb(249,224,6)" rx="2" ry="2" />
+<text  x="2005.26" y="355.5" >inet..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (76,000,000 samples, 0.69%)</title><rect x="1345.3" y="281" width="14.0" height="15.0" fill="rgb(250,221,12)" rx="2" ry="2" />
+<text  x="1348.30" y="291.5" ></text>
+</g>
+<g >
+<title>__libc_recv (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="249" width="32.0" height="15.0" fill="rgb(237,11,37)" rx="2" ry="2" />
+<text  x="2005.26" y="259.5" >__li..</text>
+</g>
+<g >
+<title>__libc_recv (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="233" width="5.2" height="15.0" fill="rgb(230,66,24)" rx="2" ry="2" />
+<text  x="1224.49" y="243.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (212,000,000 samples, 1.93%)</title><rect x="999.7" y="329" width="39.0" height="15.0" fill="rgb(229,176,20)" rx="2" ry="2" />
+<text  x="1002.68" y="339.5" >inet_r..</text>
+</g>
+<g >
+<title>__sys_recvfrom (30,000,000 samples, 0.27%)</title><rect x="272.7" y="329" width="5.5" height="15.0" fill="rgb(231,59,30)" rx="2" ry="2" />
+<text  x="275.71" y="339.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="329" width="76.6" height="15.0" fill="rgb(253,207,51)" rx="2" ry="2" />
+<text  x="1271.66" y="339.5" >__x64_sys_recv..</text>
+</g>
+<g >
+<title>__sys_recvfrom (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="329" width="2.2" height="15.0" fill="rgb(208,69,40)" rx="2" ry="2" />
+<text  x="1258.02" y="339.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="297" width="6.7" height="15.0" fill="rgb(223,67,38)" rx="2" ry="2" />
+<text  x="1041.74" y="307.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="345" width="2.2" height="15.0" fill="rgb(237,74,9)" rx="2" ry="2" />
+<text  x="1258.02" y="355.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="313" width="20.6" height="15.0" fill="rgb(246,148,49)" rx="2" ry="2" />
+<text  x="1589.27" y="323.5" >__..</text>
+</g>
+<g >
+<title>do_syscall_64 (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="297" width="14.0" height="15.0" fill="rgb(239,152,30)" rx="2" ry="2" />
+<text  x="1370.40" y="307.5" ></text>
+</g>
+<g >
+<title>current_time (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="345" width="0.4" height="15.0" fill="rgb(222,34,23)" rx="2" ry="2" />
+<text  x="2004.89" y="355.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="329" width="3.7" height="15.0" fill="rgb(233,158,47)" rx="2" ry="2" />
+<text  x="2037.32" y="339.5" ></text>
+</g>
+<g >
+<title>ext4_file_write_iter (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="313" width="0.4" height="15.0" fill="rgb(211,3,22)" rx="2" ry="2" />
+<text  x="1265.39" y="323.5" ></text>
+</g>
+<g >
+<title>__libc_recv (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="265" width="2.2" height="15.0" fill="rgb(214,91,3)" rx="2" ry="2" />
+<text  x="1258.02" y="275.5" ></text>
+</g>
+<g >
+<title>[unknown] (2,000,000 samples, 0.02%)</title><rect x="278.2" y="41" width="0.4" height="15.0" fill="rgb(232,140,29)" rx="2" ry="2" />
+<text  x="281.24" y="51.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="249" width="8.1" height="15.0" fill="rgb(226,39,37)" rx="2" ry="2" />
+<text  x="1048.37" y="259.5" ></text>
+</g>
+<g >
+<title>__libc_recv (68,000,000 samples, 0.62%)</title><rect x="49.8" y="281" width="12.5" height="15.0" fill="rgb(254,79,4)" rx="2" ry="2" />
+<text  x="52.79" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="265" width="204.9" height="15.0" fill="rgb(230,193,19)" rx="2" ry="2" />
+<text  x="70.85" y="275.5" >entry_SYSCALL_64_after_hwframe</text>
+</g>
+<g >
+<title>__sys_recvfrom (16,000,000 samples, 0.15%)</title><rect x="1262.8" y="345" width="2.9" height="15.0" fill="rgb(212,168,5)" rx="2" ry="2" />
+<text  x="1265.76" y="355.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="313" width="8.1" height="15.0" fill="rgb(221,81,41)" rx="2" ry="2" />
+<text  x="1048.37" y="323.5" ></text>
+</g>
+<g >
+<title>generic_write_end (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="281" width="0.4" height="15.0" fill="rgb(225,201,37)" rx="2" ry="2" />
+<text  x="1265.02" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (90,000,000 samples, 0.82%)</title><rect x="1629.7" y="297" width="16.6" height="15.0" fill="rgb(235,151,45)" rx="2" ry="2" />
+<text  x="1632.75" y="307.5" >e..</text>
+</g>
+<g >
+<title>ext4_do_update_inode (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="361" width="0.4" height="15.0" fill="rgb(233,140,47)" rx="2" ry="2" />
+<text  x="1265.02" y="371.5" ></text>
+</g>
+<g >
+<title>new_sync_write (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="201" width="0.4" height="15.0" fill="rgb(212,226,37)" rx="2" ry="2" />
+<text  x="1265.02" y="211.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (44,000,000 samples, 0.40%)</title><rect x="1359.3" y="345" width="8.1" height="15.0" fill="rgb(250,186,0)" rx="2" ry="2" />
+<text  x="1362.30" y="355.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (192,000,000 samples, 1.74%)</title><rect x="1053.5" y="329" width="35.3" height="15.0" fill="rgb(251,130,6)" rx="2" ry="2" />
+<text  x="1056.48" y="339.5" >do_sy..</text>
+</g>
+<g >
+<title>security_socket_recvmsg (38,000,000 samples, 0.35%)</title><rect x="34.3" y="329" width="7.0" height="15.0" fill="rgb(237,81,48)" rx="2" ry="2" />
+<text  x="37.32" y="339.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (30,000,000 samples, 0.27%)</title><rect x="272.7" y="297" width="5.5" height="15.0" fill="rgb(230,29,49)" rx="2" ry="2" />
+<text  x="275.71" y="307.5" ></text>
+</g>
+<g >
+<title>__libc_recv (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="249" width="4.4" height="15.0" fill="rgb(213,187,18)" rx="2" ry="2" />
+<text  x="1253.60" y="259.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="329" width="3.3" height="15.0" fill="rgb(224,213,44)" rx="2" ry="2" />
+<text  x="1221.18" y="339.5" ></text>
+</g>
+<g >
+<title>__libc_write (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="201" width="0.4" height="15.0" fill="rgb(244,73,50)" rx="2" ry="2" />
+<text  x="1265.39" y="211.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="265" width="8.1" height="15.0" fill="rgb(225,117,28)" rx="2" ry="2" />
+<text  x="1048.37" y="275.5" ></text>
+</g>
+<g >
+<title>__x64_sys_write (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="249" width="0.4" height="15.0" fill="rgb(238,9,33)" rx="2" ry="2" />
+<text  x="1265.39" y="259.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="265" width="2.2" height="15.0" fill="rgb(225,36,51)" rx="2" ry="2" />
+<text  x="1583.01" y="275.5" ></text>
+</g>
+<g >
+<title>_raw_spin_unlock_bh (46,000,000 samples, 0.42%)</title><rect x="1218.2" y="361" width="8.5" height="15.0" fill="rgb(253,100,5)" rx="2" ry="2" />
+<text  x="1221.18" y="371.5" ></text>
+</g>
+<g >
+<title>__fdget (98,000,000 samples, 0.89%)</title><rect x="49.8" y="361" width="18.0" height="15.0" fill="rgb(233,172,3)" rx="2" ry="2" />
+<text  x="52.79" y="371.5" >_..</text>
+</g>
+<g >
+<title>__check_object_size (4,000,000 samples, 0.04%)</title><rect x="33.6" y="345" width="0.7" height="15.0" fill="rgb(241,160,38)" rx="2" ry="2" />
+<text  x="36.58" y="355.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="137" width="0.4" height="15.0" fill="rgb(223,210,53)" rx="2" ry="2" />
+<text  x="1265.02" y="147.5" ></text>
+</g>
+<g >
+<title>generic_perform_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="201" width="0.4" height="15.0" fill="rgb(207,63,19)" rx="2" ry="2" />
+<text  x="281.24" y="211.5" ></text>
+</g>
+<g >
+<title>receive (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="73" width="0.4" height="15.0" fill="rgb(228,29,34)" rx="2" ry="2" />
+<text  x="1265.02" y="83.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="297" width="4.1" height="15.0" fill="rgb(224,212,48)" rx="2" ry="2" />
+<text  x="1249.55" y="307.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="345" width="5.2" height="15.0" fill="rgb(223,132,0)" rx="2" ry="2" />
+<text  x="1224.49" y="355.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (44,000,000 samples, 0.40%)</title><rect x="1359.3" y="297" width="8.1" height="15.0" fill="rgb(238,23,52)" rx="2" ry="2" />
+<text  x="1362.30" y="307.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (38,000,000 samples, 0.35%)</title><rect x="1622.7" y="329" width="7.0" height="15.0" fill="rgb(248,134,6)" rx="2" ry="2" />
+<text  x="1625.75" y="339.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="233" width="4.4" height="15.0" fill="rgb(239,0,0)" rx="2" ry="2" />
+<text  x="1253.60" y="243.5" ></text>
+</g>
+<g >
+<title>__libc_recv (2,944,000,000 samples, 26.74%)</title><rect x="278.6" y="361" width="542.4" height="15.0" fill="rgb(234,26,1)" rx="2" ry="2" />
+<text  x="281.61" y="371.5" >__libc_recv</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (1,062,000,000 samples, 9.65%)</title><rect x="1381.4" y="345" width="195.7" height="15.0" fill="rgb(229,181,24)" rx="2" ry="2" />
+<text  x="1384.41" y="355.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (38,000,000 samples, 0.35%)</title><rect x="1088.8" y="297" width="7.0" height="15.0" fill="rgb(234,110,1)" rx="2" ry="2" />
+<text  x="1091.85" y="307.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (16,000,000 samples, 0.15%)</title><rect x="1265.7" y="345" width="3.0" height="15.0" fill="rgb(219,76,20)" rx="2" ry="2" />
+<text  x="1268.71" y="355.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="345" width="20.6" height="15.0" fill="rgb(241,66,15)" rx="2" ry="2" />
+<text  x="1589.27" y="355.5" >so..</text>
+</g>
+<g >
+<title>do_syscall_64 (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="281" width="4.1" height="15.0" fill="rgb(218,85,27)" rx="2" ry="2" />
+<text  x="1249.55" y="291.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (16,000,000 samples, 0.15%)</title><rect x="1262.8" y="313" width="2.9" height="15.0" fill="rgb(249,122,3)" rx="2" ry="2" />
+<text  x="1265.76" y="323.5" ></text>
+</g>
+<g >
+<title>__libc_recv (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="265" width="14.0" height="15.0" fill="rgb(241,72,34)" rx="2" ry="2" />
+<text  x="1370.40" y="275.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="121" width="0.4" height="15.0" fill="rgb(230,127,41)" rx="2" ry="2" />
+<text  x="1265.02" y="131.5" ></text>
+</g>
+<g >
+<title>__errno_location (46,000,000 samples, 0.42%)</title><rect x="41.3" y="361" width="8.5" height="15.0" fill="rgb(231,211,33)" rx="2" ry="2" />
+<text  x="44.32" y="371.5" ></text>
+</g>
+<g >
+<title>__libc_recv (36,000,000 samples, 0.33%)</title><rect x="821.0" y="217" width="6.6" height="15.0" fill="rgb(210,135,21)" rx="2" ry="2" />
+<text  x="823.98" y="227.5" ></text>
+</g>
+<g >
+<title>apparmor_socket_recvmsg (38,000,000 samples, 0.35%)</title><rect x="34.3" y="345" width="7.0" height="15.0" fill="rgb(231,66,27)" rx="2" ry="2" />
+<text  x="37.32" y="355.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (30,000,000 samples, 0.27%)</title><rect x="272.7" y="313" width="5.5" height="15.0" fill="rgb(220,119,1)" rx="2" ry="2" />
+<text  x="275.71" y="323.5" ></text>
+</g>
+<g >
+<title>__libc_recv (22,000,000 samples, 0.20%)</title><rect x="1582.2" y="281" width="4.1" height="15.0" fill="rgb(228,4,42)" rx="2" ry="2" />
+<text  x="1585.22" y="291.5" ></text>
+</g>
+<g >
+<title>__cond_resched (38,000,000 samples, 0.35%)</title><rect x="34.3" y="361" width="7.0" height="15.0" fill="rgb(217,174,15)" rx="2" ry="2" />
+<text  x="37.32" y="371.5" ></text>
+</g>
+<g >
+<title>__ext4_get_inode_loc (2,000,000 samples, 0.02%)</title><rect x="278.2" y="329" width="0.4" height="15.0" fill="rgb(236,28,19)" rx="2" ry="2" />
+<text  x="281.24" y="339.5" ></text>
+</g>
+<g >
+<title>__libc_recv (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="249" width="2.2" height="15.0" fill="rgb(220,177,10)" rx="2" ry="2" />
+<text  x="1583.01" y="259.5" ></text>
+</g>
+<g >
+<title>__x64_sys_write (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="153" width="0.4" height="15.0" fill="rgb(247,10,2)" rx="2" ry="2" />
+<text  x="1265.02" y="163.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="329" width="6.7" height="15.0" fill="rgb(224,12,25)" rx="2" ry="2" />
+<text  x="1041.74" y="339.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (90,000,000 samples, 0.82%)</title><rect x="1629.7" y="345" width="16.6" height="15.0" fill="rgb(246,181,6)" rx="2" ry="2" />
+<text  x="1632.75" y="355.5" >_..</text>
+</g>
+<g >
+<title>security_socket_recvmsg (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="313" width="2.9" height="15.0" fill="rgb(217,146,11)" rx="2" ry="2" />
+<text  x="1580.06" y="323.5" ></text>
+</g>
+<g >
+<title>sockfd_lookup_light (30,000,000 samples, 0.27%)</title><rect x="272.7" y="345" width="5.5" height="15.0" fill="rgb(225,140,23)" rx="2" ry="2" />
+<text  x="275.71" y="355.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="297" width="3.3" height="15.0" fill="rgb(210,210,34)" rx="2" ry="2" />
+<text  x="1221.18" y="307.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="265" width="3.3" height="15.0" fill="rgb(220,119,36)" rx="2" ry="2" />
+<text  x="1221.18" y="275.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="313" width="19.8" height="15.0" fill="rgb(235,124,18)" rx="2" ry="2" />
+<text  x="1229.65" y="323.5" >so..</text>
+</g>
+<g >
+<title>fput_many (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="361" width="76.6" height="15.0" fill="rgb(216,126,2)" rx="2" ry="2" />
+<text  x="1271.66" y="371.5" >fput_many</text>
+</g>
+<g >
+<title>std::sys::unix::decode_error_kind (56,000,000 samples, 0.51%)</title><rect x="1649.6" y="361" width="10.4" height="15.0" fill="rgb(213,183,41)" rx="2" ry="2" />
+<text  x="1652.64" y="371.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (212,000,000 samples, 1.93%)</title><rect x="999.7" y="265" width="39.0" height="15.0" fill="rgb(241,222,4)" rx="2" ry="2" />
+<text  x="1002.68" y="275.5" >do_sys..</text>
+</g>
+<g >
+<title>__libc_recv (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="249" width="4.1" height="15.0" fill="rgb(205,156,45)" rx="2" ry="2" />
+<text  x="1249.55" y="259.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="265" width="19.8" height="15.0" fill="rgb(233,203,19)" rx="2" ry="2" />
+<text  x="1229.65" y="275.5" >do..</text>
+</g>
+<g >
+<title>do_syscall_64 (22,000,000 samples, 0.20%)</title><rect x="1582.2" y="313" width="4.1" height="15.0" fill="rgb(234,121,18)" rx="2" ry="2" />
+<text  x="1585.22" y="323.5" ></text>
+</g>
+<g >
+<title>ext4_buffered_write_iter (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="281" width="0.4" height="15.0" fill="rgb(223,9,42)" rx="2" ry="2" />
+<text  x="2004.89" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="233" width="2.9" height="15.0" fill="rgb(207,225,44)" rx="2" ry="2" />
+<text  x="1580.06" y="243.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (30,000,000 samples, 0.27%)</title><rect x="62.3" y="329" width="5.5" height="15.0" fill="rgb(210,107,4)" rx="2" ry="2" />
+<text  x="65.32" y="339.5" ></text>
+</g>
+<g >
+<title>ext4_reserve_inode_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="297" width="0.4" height="15.0" fill="rgb(206,50,8)" rx="2" ry="2" />
+<text  x="281.24" y="307.5" ></text>
+</g>
+<g >
+<title>receive (2,000,000 samples, 0.02%)</title><rect x="278.2" y="25" width="0.4" height="15.0" fill="rgb(224,33,54)" rx="2" ry="2" />
+<text  x="281.24" y="35.5" ></text>
+</g>
+<g >
+<title>vfs_write (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="281" width="0.4" height="15.0" fill="rgb(238,117,40)" rx="2" ry="2" />
+<text  x="1265.39" y="291.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (38,000,000 samples, 0.35%)</title><rect x="1622.7" y="345" width="7.0" height="15.0" fill="rgb(211,215,16)" rx="2" ry="2" />
+<text  x="1625.75" y="355.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="249" width="3.3" height="15.0" fill="rgb(236,11,27)" rx="2" ry="2" />
+<text  x="1221.18" y="259.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="297" width="5.2" height="15.0" fill="rgb(249,29,18)" rx="2" ry="2" />
+<text  x="1224.49" y="307.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="281" width="102.8" height="15.0" fill="rgb(224,53,45)" rx="2" ry="2" />
+<text  x="1118.38" y="291.5" >__x64_sys_recvfrom</text>
+</g>
+<g >
+<title>__libc_recv (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="217" width="6.7" height="15.0" fill="rgb(208,191,47)" rx="2" ry="2" />
+<text  x="1041.74" y="227.5" ></text>
+</g>
+<g >
+<title>_raw_spin_lock_bh (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="361" width="102.8" height="15.0" fill="rgb(218,63,28)" rx="2" ry="2" />
+<text  x="1118.38" y="371.5" >_raw_spin_lock_bh</text>
+</g>
+<g >
+<title>__sys_recvfrom (68,000,000 samples, 0.62%)</title><rect x="49.8" y="345" width="12.5" height="15.0" fill="rgb(212,222,12)" rx="2" ry="2" />
+<text  x="52.79" y="355.5" ></text>
+</g>
+<g >
+<title>__libc_recv (12,000,000 samples, 0.11%)</title><rect x="827.6" y="201" width="2.2" height="15.0" fill="rgb(229,155,1)" rx="2" ry="2" />
+<text  x="830.61" y="211.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="345" width="76.6" height="15.0" fill="rgb(246,87,36)" rx="2" ry="2" />
+<text  x="1271.66" y="355.5" >__sys_recvfrom</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="217" width="19.8" height="15.0" fill="rgb(240,40,42)" rx="2" ry="2" />
+<text  x="1229.65" y="227.5" >ud..</text>
+</g>
+<g >
+<title>file_update_time (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="329" width="0.4" height="15.0" fill="rgb(219,31,10)" rx="2" ry="2" />
+<text  x="2004.89" y="339.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="313" width="3.3" height="15.0" fill="rgb(237,132,6)" rx="2" ry="2" />
+<text  x="1221.18" y="323.5" ></text>
+</g>
+<g >
+<title>ext4_dirty_inode (2,000,000 samples, 0.02%)</title><rect x="278.2" y="265" width="0.4" height="15.0" fill="rgb(227,224,26)" rx="2" ry="2" />
+<text  x="281.24" y="275.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (120,000,000 samples, 1.09%)</title><rect x="1359.3" y="361" width="22.1" height="15.0" fill="rgb(247,92,46)" rx="2" ry="2" />
+<text  x="1362.30" y="371.5" >in..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (26,000,000 samples, 0.24%)</title><rect x="1257.2" y="313" width="4.8" height="15.0" fill="rgb(249,92,44)" rx="2" ry="2" />
+<text  x="1260.23" y="323.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="265" width="6.7" height="15.0" fill="rgb(237,32,25)" rx="2" ry="2" />
+<text  x="1041.74" y="275.5" ></text>
+</g>
+<g >
+<title>__fdget (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="345" width="204.9" height="15.0" fill="rgb(232,32,53)" rx="2" ry="2" />
+<text  x="70.85" y="355.5" >__fdget</text>
+</g>
+<g >
+<title>__sys_recvfrom (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="297" width="102.8" height="15.0" fill="rgb(214,149,13)" rx="2" ry="2" />
+<text  x="1118.38" y="307.5" >__sys_recvfrom</text>
+</g>
+<g >
+<title>__sys_recvfrom (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="281" width="6.7" height="15.0" fill="rgb(249,171,42)" rx="2" ry="2" />
+<text  x="1041.74" y="291.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (12,000,000 samples, 0.11%)</title><rect x="827.6" y="297" width="2.2" height="15.0" fill="rgb(208,144,9)" rx="2" ry="2" />
+<text  x="830.61" y="307.5" ></text>
+</g>
+<g >
+<title>syscall_exit_to_user_mode (54,000,000 samples, 0.49%)</title><rect x="1991.9" y="361" width="10.0" height="15.0" fill="rgb(248,23,34)" rx="2" ry="2" />
+<text  x="1994.94" y="371.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (36,000,000 samples, 0.33%)</title><rect x="821.0" y="297" width="6.6" height="15.0" fill="rgb(254,189,32)" rx="2" ry="2" />
+<text  x="823.98" y="307.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (4,000,000 samples, 0.04%)</title><rect x="33.6" y="201" width="0.7" height="15.0" fill="rgb(225,177,1)" rx="2" ry="2" />
+<text  x="36.58" y="211.5" ></text>
+</g>
+<g >
+<title>__libc_recv (18,000,000 samples, 0.16%)</title><rect x="1646.3" y="297" width="3.3" height="15.0" fill="rgb(238,225,16)" rx="2" ry="2" />
+<text  x="1649.33" y="307.5" ></text>
+</g>
+<g >
+<title>__skb_recv_udp (36,000,000 samples, 0.33%)</title><rect x="821.0" y="345" width="6.6" height="15.0" fill="rgb(232,141,26)" rx="2" ry="2" />
+<text  x="823.98" y="355.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (30,000,000 samples, 0.27%)</title><rect x="272.7" y="249" width="5.5" height="15.0" fill="rgb(245,190,42)" rx="2" ry="2" />
+<text  x="275.71" y="259.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (4,000,000 samples, 0.04%)</title><rect x="33.6" y="313" width="0.7" height="15.0" fill="rgb(241,164,13)" rx="2" ry="2" />
+<text  x="36.58" y="323.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="217" width="0.4" height="15.0" fill="rgb(228,123,30)" rx="2" ry="2" />
+<text  x="1265.39" y="227.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (212,000,000 samples, 1.93%)</title><rect x="999.7" y="281" width="39.0" height="15.0" fill="rgb(205,25,50)" rx="2" ry="2" />
+<text  x="1002.68" y="291.5" >__x64_..</text>
+</g>
+<g >
+<title>do_syscall_64 (90,000,000 samples, 0.82%)</title><rect x="1629.7" y="313" width="16.6" height="15.0" fill="rgb(208,18,19)" rx="2" ry="2" />
+<text  x="1632.75" y="323.5" >d..</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (36,000,000 samples, 0.33%)</title><rect x="821.0" y="265" width="6.6" height="15.0" fill="rgb(243,50,12)" rx="2" ry="2" />
+<text  x="823.98" y="275.5" ></text>
+</g>
+<g >
+<title>__libc_recv (16,000,000 samples, 0.15%)</title><rect x="1265.7" y="297" width="3.0" height="15.0" fill="rgb(232,155,14)" rx="2" ry="2" />
+<text  x="1268.71" y="307.5" ></text>
+</g>
+<g >
+<title>__fget_light (1,142,000,000 samples, 10.37%)</title><rect x="67.8" y="361" width="210.4" height="15.0" fill="rgb(222,61,8)" rx="2" ry="2" />
+<text  x="70.85" y="371.5" >__fget_light</text>
+</g>
+<g >
+<title>sock_recvmsg (212,000,000 samples, 1.93%)</title><rect x="999.7" y="313" width="39.0" height="15.0" fill="rgb(216,227,51)" rx="2" ry="2" />
+<text  x="1002.68" y="323.5" >sock_r..</text>
+</g>
+<g >
+<title>sock_recvmsg (4,000,000 samples, 0.04%)</title><rect x="33.6" y="297" width="0.7" height="15.0" fill="rgb(252,119,22)" rx="2" ry="2" />
+<text  x="36.58" y="307.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="297" width="2.2" height="15.0" fill="rgb(239,74,31)" rx="2" ry="2" />
+<text  x="1258.02" y="307.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (4,000,000 samples, 0.04%)</title><rect x="33.6" y="329" width="0.7" height="15.0" fill="rgb(228,4,22)" rx="2" ry="2" />
+<text  x="36.58" y="339.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="313" width="2.2" height="15.0" fill="rgb(221,44,1)" rx="2" ry="2" />
+<text  x="1258.02" y="323.5" ></text>
+</g>
+<g >
+<title>__libc_recv (20,000,000 samples, 0.18%)</title><rect x="996.0" y="249" width="3.7" height="15.0" fill="rgb(211,20,8)" rx="2" ry="2" />
+<text  x="999.00" y="259.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="313" width="5.2" height="15.0" fill="rgb(218,13,47)" rx="2" ry="2" />
+<text  x="1224.49" y="323.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (30,000,000 samples, 0.27%)</title><rect x="272.7" y="281" width="5.5" height="15.0" fill="rgb(226,82,14)" rx="2" ry="2" />
+<text  x="275.71" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="233" width="3.3" height="15.0" fill="rgb(246,37,41)" rx="2" ry="2" />
+<text  x="1221.18" y="243.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (16,000,000 samples, 0.15%)</title><rect x="1262.8" y="265" width="2.9" height="15.0" fill="rgb(210,65,2)" rx="2" ry="2" />
+<text  x="1265.76" y="275.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (86,000,000 samples, 0.78%)</title><rect x="1606.9" y="265" width="15.8" height="15.0" fill="rgb(235,20,12)" rx="2" ry="2" />
+<text  x="1609.90" y="275.5" >u..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (2,000,000 samples, 0.02%)</title><rect x="1095.8" y="297" width="0.4" height="15.0" fill="rgb(236,6,45)" rx="2" ry="2" />
+<text  x="1098.85" y="307.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (86,000,000 samples, 0.78%)</title><rect x="1606.9" y="297" width="15.8" height="15.0" fill="rgb(212,14,35)" rx="2" ry="2" />
+<text  x="1609.90" y="307.5" >e..</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (192,000,000 samples, 1.74%)</title><rect x="1053.5" y="345" width="35.3" height="15.0" fill="rgb(218,144,39)" rx="2" ry="2" />
+<text  x="1056.48" y="355.5" >__x64..</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="281" width="8.1" height="15.0" fill="rgb(208,195,19)" rx="2" ry="2" />
+<text  x="1048.37" y="291.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (128,000,000 samples, 1.16%)</title><rect x="10.0" y="345" width="23.6" height="15.0" fill="rgb(220,189,39)" rx="2" ry="2" />
+<text  x="13.00" y="355.5" >ud..</text>
+</g>
+<g >
+<title>sock_recvmsg (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="329" width="32.0" height="15.0" fill="rgb(246,1,33)" rx="2" ry="2" />
+<text  x="2005.26" y="339.5" >sock..</text>
+</g>
+<g >
+<title>__libc_recv (86,000,000 samples, 0.78%)</title><rect x="1606.9" y="281" width="15.8" height="15.0" fill="rgb(244,138,9)" rx="2" ry="2" />
+<text  x="1609.90" y="291.5" >_..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="281" width="2.2" height="15.0" fill="rgb(217,144,6)" rx="2" ry="2" />
+<text  x="1258.02" y="291.5" ></text>
+</g>
+<g >
+<title>generic_perform_write (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="345" width="0.4" height="15.0" fill="rgb(237,221,31)" rx="2" ry="2" />
+<text  x="1265.39" y="355.5" ></text>
+</g>
+<g >
+<title>ext4_get_inode_loc (2,000,000 samples, 0.02%)</title><rect x="278.2" y="313" width="0.4" height="15.0" fill="rgb(223,79,7)" rx="2" ry="2" />
+<text  x="281.24" y="323.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="249" width="5.2" height="15.0" fill="rgb(248,37,17)" rx="2" ry="2" />
+<text  x="1224.49" y="259.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (30,000,000 samples, 0.27%)</title><rect x="62.3" y="297" width="5.5" height="15.0" fill="rgb(239,143,39)" rx="2" ry="2" />
+<text  x="65.32" y="307.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="313" width="32.0" height="15.0" fill="rgb(248,21,7)" rx="2" ry="2" />
+<text  x="2005.26" y="323.5" >__sy..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="249" width="14.0" height="15.0" fill="rgb(247,218,8)" rx="2" ry="2" />
+<text  x="1370.40" y="259.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (36,000,000 samples, 0.33%)</title><rect x="821.0" y="201" width="6.6" height="15.0" fill="rgb(208,103,14)" rx="2" ry="2" />
+<text  x="823.98" y="211.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (12,000,000 samples, 0.11%)</title><rect x="827.6" y="313" width="2.2" height="15.0" fill="rgb(220,192,53)" rx="2" ry="2" />
+<text  x="830.61" y="323.5" ></text>
+</g>
+<g >
+<title>ext4_file_write_iter (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="265" width="0.4" height="15.0" fill="rgb(236,142,24)" rx="2" ry="2" />
+<text  x="2004.89" y="275.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (12,000,000 samples, 0.11%)</title><rect x="827.6" y="185" width="2.2" height="15.0" fill="rgb(239,9,38)" rx="2" ry="2" />
+<text  x="830.61" y="195.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (12,000,000 samples, 0.11%)</title><rect x="827.6" y="233" width="2.2" height="15.0" fill="rgb(238,127,44)" rx="2" ry="2" />
+<text  x="830.61" y="243.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (30,000,000 samples, 0.27%)</title><rect x="62.3" y="249" width="5.5" height="15.0" fill="rgb(233,98,37)" rx="2" ry="2" />
+<text  x="65.32" y="259.5" ></text>
+</g>
+<g >
+<title>ext4_buffered_write_iter (2,000,000 samples, 0.02%)</title><rect x="278.2" y="185" width="0.4" height="15.0" fill="rgb(219,73,51)" rx="2" ry="2" />
+<text  x="281.24" y="195.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="281" width="3.3" height="15.0" fill="rgb(234,136,50)" rx="2" ry="2" />
+<text  x="1221.18" y="291.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (38,000,000 samples, 0.35%)</title><rect x="34.3" y="265" width="7.0" height="15.0" fill="rgb(243,59,54)" rx="2" ry="2" />
+<text  x="37.32" y="275.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (36,000,000 samples, 0.33%)</title><rect x="821.0" y="233" width="6.6" height="15.0" fill="rgb(218,175,41)" rx="2" ry="2" />
+<text  x="823.98" y="243.5" ></text>
+</g>
+<g >
+<title>all (11,008,000,000 samples, 100%)</title><rect x="10.0" y="377" width="2028.0" height="15.0" fill="rgb(238,110,5)" rx="2" ry="2" />
+<text  x="13.00" y="387.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (230,000,000 samples, 2.09%)</title><rect x="1053.5" y="361" width="42.3" height="15.0" fill="rgb(211,140,9)" rx="2" ry="2" />
+<text  x="1056.48" y="371.5" >__sys_..</text>
+</g>
+<g >
+<title>ext4_dirty_inode (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="313" width="0.4" height="15.0" fill="rgb(225,33,21)" rx="2" ry="2" />
+<text  x="1265.02" y="323.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (18,000,000 samples, 0.16%)</title><rect x="1646.3" y="313" width="3.3" height="15.0" fill="rgb(244,120,17)" rx="2" ry="2" />
+<text  x="1649.33" y="323.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="217" width="5.2" height="15.0" fill="rgb(227,79,45)" rx="2" ry="2" />
+<text  x="1224.49" y="227.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="281" width="2.9" height="15.0" fill="rgb(222,203,35)" rx="2" ry="2" />
+<text  x="1580.06" y="291.5" ></text>
+</g>
+<g >
+<title>__x64_sys_write (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="201" width="0.4" height="15.0" fill="rgb(223,118,1)" rx="2" ry="2" />
+<text  x="2004.89" y="211.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (2,000,000 samples, 0.02%)</title><rect x="1095.8" y="329" width="0.4" height="15.0" fill="rgb(210,60,33)" rx="2" ry="2" />
+<text  x="1098.85" y="339.5" ></text>
+</g>
+<g >
+<title>ext4_buffered_write_iter (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="329" width="0.4" height="15.0" fill="rgb(221,47,14)" rx="2" ry="2" />
+<text  x="1265.39" y="339.5" ></text>
+</g>
+<g >
+<title>__ext4_mark_inode_dirty (2,000,000 samples, 0.02%)</title><rect x="278.2" y="281" width="0.4" height="15.0" fill="rgb(250,118,47)" rx="2" ry="2" />
+<text  x="281.24" y="291.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (458,000,000 samples, 4.16%)</title><rect x="829.8" y="345" width="84.4" height="15.0" fill="rgb(226,167,26)" rx="2" ry="2" />
+<text  x="832.82" y="355.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>__skb_recv_udp (12,000,000 samples, 0.11%)</title><rect x="827.6" y="329" width="2.2" height="15.0" fill="rgb(237,126,50)" rx="2" ry="2" />
+<text  x="830.61" y="339.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (38,000,000 samples, 0.35%)</title><rect x="1622.7" y="313" width="7.0" height="15.0" fill="rgb(230,131,37)" rx="2" ry="2" />
+<text  x="1625.75" y="323.5" ></text>
+</g>
+<g >
+<title>__skb_try_recv_from_queue (80,000,000 samples, 0.73%)</title><rect x="1038.7" y="361" width="14.8" height="15.0" fill="rgb(212,66,49)" rx="2" ry="2" />
+<text  x="1041.74" y="371.5" >_..</text>
+</g>
+<g >
+<title>do_syscall_64 (18,000,000 samples, 0.16%)</title><rect x="1646.3" y="329" width="3.3" height="15.0" fill="rgb(245,184,42)" rx="2" ry="2" />
+<text  x="1649.33" y="339.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (20,000,000 samples, 0.18%)</title><rect x="996.0" y="313" width="3.7" height="15.0" fill="rgb(217,30,6)" rx="2" ry="2" />
+<text  x="999.00" y="323.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (4,000,000 samples, 0.04%)</title><rect x="33.6" y="233" width="0.7" height="15.0" fill="rgb(211,100,31)" rx="2" ry="2" />
+<text  x="36.58" y="243.5" ></text>
+</g>
+<g >
+<title>ksys_write (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="169" width="0.4" height="15.0" fill="rgb(214,89,22)" rx="2" ry="2" />
+<text  x="1265.02" y="179.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="265" width="4.1" height="15.0" fill="rgb(210,57,30)" rx="2" ry="2" />
+<text  x="1249.55" y="275.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="281" width="32.0" height="15.0" fill="rgb(228,43,42)" rx="2" ry="2" />
+<text  x="2005.26" y="291.5" >do_s..</text>
+</g>
+<g >
+<title>ext4_mark_iloc_dirty (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="345" width="0.4" height="15.0" fill="rgb(253,228,7)" rx="2" ry="2" />
+<text  x="1265.02" y="355.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="313" width="14.0" height="15.0" fill="rgb(229,178,1)" rx="2" ry="2" />
+<text  x="1370.40" y="323.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="281" width="2.2" height="15.0" fill="rgb(228,33,17)" rx="2" ry="2" />
+<text  x="1583.01" y="291.5" ></text>
+</g>
+<g >
+<title>sockfd_lookup_light (30,000,000 samples, 0.27%)</title><rect x="62.3" y="345" width="5.5" height="15.0" fill="rgb(231,75,42)" rx="2" ry="2" />
+<text  x="65.32" y="355.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="329" width="102.8" height="15.0" fill="rgb(236,140,23)" rx="2" ry="2" />
+<text  x="1118.38" y="339.5" >inet_recvmsg</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="297" width="2.2" height="15.0" fill="rgb(247,50,36)" rx="2" ry="2" />
+<text  x="1583.01" y="307.5" ></text>
+</g>
+<g >
+<title>fault_in_iov_iter_readable (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="361" width="0.4" height="15.0" fill="rgb(222,196,51)" rx="2" ry="2" />
+<text  x="1265.39" y="371.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (38,000,000 samples, 0.35%)</title><rect x="1088.8" y="329" width="7.0" height="15.0" fill="rgb(222,125,36)" rx="2" ry="2" />
+<text  x="1091.85" y="339.5" ></text>
+</g>
+<g >
+<title>vfs_write (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="233" width="0.4" height="15.0" fill="rgb(215,159,8)" rx="2" ry="2" />
+<text  x="2004.89" y="243.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (56,000,000 samples, 0.51%)</title><rect x="1649.6" y="345" width="10.4" height="15.0" fill="rgb(210,217,38)" rx="2" ry="2" />
+<text  x="1652.64" y="355.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (44,000,000 samples, 0.40%)</title><rect x="1359.3" y="329" width="8.1" height="15.0" fill="rgb(208,199,30)" rx="2" ry="2" />
+<text  x="1362.30" y="339.5" ></text>
+</g>
+<g >
+<title>sockfd_lookup_light (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="329" width="204.9" height="15.0" fill="rgb(211,219,37)" rx="2" ry="2" />
+<text  x="70.85" y="339.5" >sockfd_lookup_light</text>
+</g>
+<g >
+<title>__sys_recvfrom (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="313" width="4.4" height="15.0" fill="rgb(208,165,44)" rx="2" ry="2" />
+<text  x="1253.60" y="323.5" ></text>
+</g>
+<g >
+<title>__x64_sys_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="105" width="0.4" height="15.0" fill="rgb(227,37,47)" rx="2" ry="2" />
+<text  x="281.24" y="115.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (76,000,000 samples, 0.69%)</title><rect x="1345.3" y="345" width="14.0" height="15.0" fill="rgb(240,177,21)" rx="2" ry="2" />
+<text  x="1348.30" y="355.5" ></text>
+</g>
+<g >
+<title>ext4_write_checks (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="297" width="0.4" height="15.0" fill="rgb(212,175,25)" rx="2" ry="2" />
+<text  x="2004.89" y="307.5" ></text>
+</g>
+<g >
+<title>rcu_all_qs (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="361" width="2.9" height="15.0" fill="rgb(215,87,2)" rx="2" ry="2" />
+<text  x="1580.06" y="371.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (16,000,000 samples, 0.15%)</title><rect x="1262.8" y="297" width="2.9" height="15.0" fill="rgb(210,37,26)" rx="2" ry="2" />
+<text  x="1265.76" y="307.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="201" width="3.3" height="15.0" fill="rgb(217,149,10)" rx="2" ry="2" />
+<text  x="1221.18" y="211.5" ></text>
+</g>
+<g >
+<title>timestamp_truncate (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="361" width="0.4" height="15.0" fill="rgb(227,19,49)" rx="2" ry="2" />
+<text  x="2004.89" y="371.5" ></text>
+</g>
+<g >
+<title>__libc_recv (38,000,000 samples, 0.35%)</title><rect x="34.3" y="233" width="7.0" height="15.0" fill="rgb(246,113,4)" rx="2" ry="2" />
+<text  x="37.32" y="243.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="265" width="32.0" height="15.0" fill="rgb(227,122,7)" rx="2" ry="2" />
+<text  x="2005.26" y="275.5" >entr..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="297" width="76.6" height="15.0" fill="rgb(211,56,7)" rx="2" ry="2" />
+<text  x="1271.66" y="307.5" >entry_SYSCALL_..</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (106,000,000 samples, 0.96%)</title><rect x="1095.8" y="361" width="19.6" height="15.0" fill="rgb(253,220,49)" rx="2" ry="2" />
+<text  x="1098.85" y="371.5" >__..</text>
+</g>
+<g >
+<title>ll_udp_pubsub::subscriber::UdpSubscriber&lt;MessageHandler&gt;::run (1,062,000,000 samples, 9.65%)</title><rect x="1381.4" y="361" width="195.7" height="15.0" fill="rgb(238,157,42)" rx="2" ry="2" />
+<text  x="1384.41" y="371.5" >ll_udp_pubsub::subscriber::UdpSubscribe..</text>
+</g>
+<g >
+<title>__sys_recvfrom (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="329" width="14.0" height="15.0" fill="rgb(233,32,29)" rx="2" ry="2" />
+<text  x="1370.40" y="339.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="313" width="3.7" height="15.0" fill="rgb(235,149,10)" rx="2" ry="2" />
+<text  x="2037.32" y="323.5" ></text>
+</g>
+<g >
+<title>__mark_inode_dirty (2,000,000 samples, 0.02%)</title><rect x="278.2" y="249" width="0.4" height="15.0" fill="rgb(239,207,18)" rx="2" ry="2" />
+<text  x="281.24" y="259.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (86,000,000 samples, 0.78%)</title><rect x="1606.9" y="313" width="15.8" height="15.0" fill="rgb(224,129,46)" rx="2" ry="2" />
+<text  x="1609.90" y="323.5" >d..</text>
+</g>
+<g >
+<title>sock_recvmsg (38,000,000 samples, 0.35%)</title><rect x="34.3" y="313" width="7.0" height="15.0" fill="rgb(237,228,29)" rx="2" ry="2" />
+<text  x="37.32" y="323.5" ></text>
+</g>
+<g >
+<title>__fdget (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="345" width="2.2" height="15.0" fill="rgb(252,30,44)" rx="2" ry="2" />
+<text  x="1583.01" y="355.5" ></text>
+</g>
+<g >
+<title>generic_write_end (2,000,000 samples, 0.02%)</title><rect x="278.2" y="233" width="0.4" height="15.0" fill="rgb(247,57,47)" rx="2" ry="2" />
+<text  x="281.24" y="243.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="329" width="20.6" height="15.0" fill="rgb(208,115,47)" rx="2" ry="2" />
+<text  x="1589.27" y="339.5" >__..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="249" width="3.7" height="15.0" fill="rgb(208,172,49)" rx="2" ry="2" />
+<text  x="2037.32" y="259.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="201" width="2.9" height="15.0" fill="rgb(221,152,3)" rx="2" ry="2" />
+<text  x="1580.06" y="211.5" ></text>
+</g>
+<g >
+<title>receive (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="169" width="0.4" height="15.0" fill="rgb(207,114,44)" rx="2" ry="2" />
+<text  x="1265.39" y="179.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (194,000,000 samples, 1.76%)</title><rect x="2002.3" y="361" width="35.7" height="15.0" fill="rgb(243,65,39)" rx="2" ry="2" />
+<text  x="2005.26" y="371.5" >udp_r..</text>
+</g>
+<g >
+<title>__sys_recvfrom (86,000,000 samples, 0.78%)</title><rect x="1606.9" y="345" width="15.8" height="15.0" fill="rgb(208,137,14)" rx="2" ry="2" />
+<text  x="1609.90" y="355.5" >_..</text>
+</g>
+<g >
+<title>sock_recvmsg (12,000,000 samples, 0.11%)</title><rect x="827.6" y="281" width="2.2" height="15.0" fill="rgb(247,54,30)" rx="2" ry="2" />
+<text  x="830.61" y="291.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (2,000,000 samples, 0.02%)</title><rect x="1095.8" y="345" width="0.4" height="15.0" fill="rgb(237,170,14)" rx="2" ry="2" />
+<text  x="1098.85" y="355.5" ></text>
+</g>
+<g >
+<title>apparmor_socket_recvmsg (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="329" width="2.9" height="15.0" fill="rgb(250,1,8)" rx="2" ry="2" />
+<text  x="1580.06" y="339.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (1,802,000,000 samples, 16.37%)</title><rect x="1660.0" y="329" width="331.9" height="15.0" fill="rgb(238,81,17)" rx="2" ry="2" />
+<text  x="1662.96" y="339.5" >entry_SYSCALL_64_after_hwframe</text>
+</g>
+<g >
+<title>do_syscall_64 (36,000,000 samples, 0.33%)</title><rect x="821.0" y="249" width="6.6" height="15.0" fill="rgb(239,21,45)" rx="2" ry="2" />
+<text  x="823.98" y="259.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="281" width="19.8" height="15.0" fill="rgb(230,110,16)" rx="2" ry="2" />
+<text  x="1229.65" y="291.5" >__..</text>
+</g>
+<g >
+<title>do_syscall_64 (68,000,000 samples, 0.62%)</title><rect x="49.8" y="313" width="12.5" height="15.0" fill="rgb(235,207,50)" rx="2" ry="2" />
+<text  x="52.79" y="323.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (18,000,000 samples, 0.16%)</title><rect x="1646.3" y="281" width="3.3" height="15.0" fill="rgb(244,179,10)" rx="2" ry="2" />
+<text  x="1649.33" y="291.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (38,000,000 samples, 0.35%)</title><rect x="34.3" y="297" width="7.0" height="15.0" fill="rgb(253,137,13)" rx="2" ry="2" />
+<text  x="37.32" y="307.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (68,000,000 samples, 0.62%)</title><rect x="49.8" y="265" width="12.5" height="15.0" fill="rgb(222,78,9)" rx="2" ry="2" />
+<text  x="52.79" y="275.5" ></text>
+</g>
+<g >
+<title>security_socket_recvmsg (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="329" width="19.8" height="15.0" fill="rgb(213,137,45)" rx="2" ry="2" />
+<text  x="1229.65" y="339.5" >se..</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="281" width="5.2" height="15.0" fill="rgb(248,88,38)" rx="2" ry="2" />
+<text  x="1224.49" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (12,000,000 samples, 0.11%)</title><rect x="827.6" y="217" width="2.2" height="15.0" fill="rgb(242,94,26)" rx="2" ry="2" />
+<text  x="830.61" y="227.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (20,000,000 samples, 0.18%)</title><rect x="996.0" y="297" width="3.7" height="15.0" fill="rgb(226,207,35)" rx="2" ry="2" />
+<text  x="999.00" y="307.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="297" width="3.7" height="15.0" fill="rgb(252,24,41)" rx="2" ry="2" />
+<text  x="2037.32" y="307.5" ></text>
+</g>
+<g >
+<title>ext4_da_write_end (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="265" width="0.4" height="15.0" fill="rgb(229,27,46)" rx="2" ry="2" />
+<text  x="1265.02" y="275.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="329" width="4.1" height="15.0" fill="rgb(219,14,33)" rx="2" ry="2" />
+<text  x="1249.55" y="339.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="169" width="0.4" height="15.0" fill="rgb(245,212,6)" rx="2" ry="2" />
+<text  x="2004.89" y="179.5" ></text>
+</g>
+<g >
+<title>file_modified (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="313" width="0.4" height="15.0" fill="rgb(213,152,23)" rx="2" ry="2" />
+<text  x="2004.89" y="323.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (4,000,000 samples, 0.04%)</title><rect x="33.6" y="249" width="0.7" height="15.0" fill="rgb(231,38,40)" rx="2" ry="2" />
+<text  x="36.58" y="259.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (20,000,000 samples, 0.18%)</title><rect x="996.0" y="265" width="3.7" height="15.0" fill="rgb(251,55,23)" rx="2" ry="2" />
+<text  x="999.00" y="275.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="265" width="5.2" height="15.0" fill="rgb(249,50,49)" rx="2" ry="2" />
+<text  x="1224.49" y="275.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (12,000,000 samples, 0.11%)</title><rect x="827.6" y="265" width="2.2" height="15.0" fill="rgb(207,74,26)" rx="2" ry="2" />
+<text  x="830.61" y="275.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (2,944,000,000 samples, 26.74%)</title><rect x="278.6" y="345" width="542.4" height="15.0" fill="rgb(208,198,52)" rx="2" ry="2" />
+<text  x="281.61" y="355.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>sock_recvmsg (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="345" width="3.7" height="15.0" fill="rgb(209,64,33)" rx="2" ry="2" />
+<text  x="2037.32" y="355.5" ></text>
+</g>
+<g >
+<title>__mark_inode_dirty (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="297" width="0.4" height="15.0" fill="rgb(232,175,26)" rx="2" ry="2" />
+<text  x="1265.02" y="307.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (12,000,000 samples, 0.11%)</title><rect x="1255.0" y="249" width="2.2" height="15.0" fill="rgb(242,203,8)" rx="2" ry="2" />
+<text  x="1258.02" y="259.5" ></text>
+</g>
+<g >
+<title>new_sync_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="153" width="0.4" height="15.0" fill="rgb(205,94,4)" rx="2" ry="2" />
+<text  x="281.24" y="163.5" ></text>
+</g>
+<g >
+<title>fput (32,000,000 samples, 0.29%)</title><rect x="1262.8" y="361" width="5.9" height="15.0" fill="rgb(211,170,34)" rx="2" ry="2" />
+<text  x="1265.76" y="371.5" ></text>
+</g>
+<g >
+<title>__libc_recv (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="281" width="76.6" height="15.0" fill="rgb(212,177,3)" rx="2" ry="2" />
+<text  x="1271.66" y="291.5" >__libc_recv</text>
+</g>
+<g >
+<title>do_syscall_64 (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="233" width="0.4" height="15.0" fill="rgb(252,105,14)" rx="2" ry="2" />
+<text  x="1265.39" y="243.5" ></text>
+</g>
+<g >
+<title>__pthread_enable_asynccancel (444,000,000 samples, 4.03%)</title><rect x="914.2" y="361" width="81.8" height="15.0" fill="rgb(252,5,20)" rx="2" ry="2" />
+<text  x="917.20" y="371.5" >__pthread_enabl..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (26,000,000 samples, 0.24%)</title><rect x="1257.2" y="345" width="4.8" height="15.0" fill="rgb(215,14,4)" rx="2" ry="2" />
+<text  x="1260.23" y="355.5" ></text>
+</g>
+<g >
+<title>vfs_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="137" width="0.4" height="15.0" fill="rgb(216,41,15)" rx="2" ry="2" />
+<text  x="281.24" y="147.5" ></text>
+</g>
+<g >
+<title>ksys_write (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="217" width="0.4" height="15.0" fill="rgb(242,124,6)" rx="2" ry="2" />
+<text  x="2004.89" y="227.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (20,000,000 samples, 0.18%)</title><rect x="996.0" y="281" width="3.7" height="15.0" fill="rgb(250,16,44)" rx="2" ry="2" />
+<text  x="999.00" y="291.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (22,000,000 samples, 0.20%)</title><rect x="1582.2" y="265" width="4.1" height="15.0" fill="rgb(205,36,15)" rx="2" ry="2" />
+<text  x="1585.22" y="275.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (38,000,000 samples, 0.35%)</title><rect x="34.3" y="249" width="7.0" height="15.0" fill="rgb(252,1,42)" rx="2" ry="2" />
+<text  x="37.32" y="259.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (38,000,000 samples, 0.35%)</title><rect x="34.3" y="281" width="7.0" height="15.0" fill="rgb(246,112,30)" rx="2" ry="2" />
+<text  x="37.32" y="291.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="297" width="4.4" height="15.0" fill="rgb(205,202,21)" rx="2" ry="2" />
+<text  x="1253.60" y="307.5" ></text>
+</g>
+<g >
+<title>receive (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="121" width="0.4" height="15.0" fill="rgb(230,134,27)" rx="2" ry="2" />
+<text  x="2004.89" y="131.5" ></text>
+</g>
+<g >
+<title>[unknown] (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="185" width="0.4" height="15.0" fill="rgb(212,65,54)" rx="2" ry="2" />
+<text  x="1265.39" y="195.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (22,000,000 samples, 0.20%)</title><rect x="1582.2" y="297" width="4.1" height="15.0" fill="rgb(228,72,19)" rx="2" ry="2" />
+<text  x="1585.22" y="307.5" ></text>
+</g>
+<g >
+<title>__libc_recv (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="217" width="3.3" height="15.0" fill="rgb(221,130,37)" rx="2" ry="2" />
+<text  x="1221.18" y="227.5" ></text>
+</g>
+<g >
+<title>__libc_recv (54,000,000 samples, 0.49%)</title><rect x="1991.9" y="329" width="10.0" height="15.0" fill="rgb(232,142,7)" rx="2" ry="2" />
+<text  x="1994.94" y="339.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="297" width="32.0" height="15.0" fill="rgb(208,171,16)" rx="2" ry="2" />
+<text  x="2005.26" y="307.5" >__x6..</text>
+</g>
+<g >
+<title>__libc_recv (4,000,000 samples, 0.04%)</title><rect x="33.6" y="217" width="0.7" height="15.0" fill="rgb(233,151,28)" rx="2" ry="2" />
+<text  x="36.58" y="227.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="297" width="19.8" height="15.0" fill="rgb(219,115,6)" rx="2" ry="2" />
+<text  x="1229.65" y="307.5" >__..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="217" width="8.1" height="15.0" fill="rgb(246,82,43)" rx="2" ry="2" />
+<text  x="1048.37" y="227.5" ></text>
+</g>
+<g >
+<title>__libc_recv (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="217" width="2.9" height="15.0" fill="rgb(240,24,3)" rx="2" ry="2" />
+<text  x="1580.06" y="227.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (44,000,000 samples, 0.40%)</title><rect x="1359.3" y="313" width="8.1" height="15.0" fill="rgb(219,25,32)" rx="2" ry="2" />
+<text  x="1362.30" y="323.5" ></text>
+</g>
+<g >
+<title>inet_recvmsg (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="329" width="8.1" height="15.0" fill="rgb(215,132,2)" rx="2" ry="2" />
+<text  x="1048.37" y="339.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (26,000,000 samples, 0.24%)</title><rect x="1257.2" y="361" width="4.8" height="15.0" fill="rgb(247,37,3)" rx="2" ry="2" />
+<text  x="1260.23" y="371.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (36,000,000 samples, 0.33%)</title><rect x="821.0" y="281" width="6.6" height="15.0" fill="rgb(237,25,28)" rx="2" ry="2" />
+<text  x="823.98" y="291.5" ></text>
+</g>
+<g >
+<title>__libc_recv (38,000,000 samples, 0.35%)</title><rect x="1622.7" y="297" width="7.0" height="15.0" fill="rgb(247,27,36)" rx="2" ry="2" />
+<text  x="1625.75" y="307.5" ></text>
+</g>
+<g >
+<title>[unknown] (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="89" width="0.4" height="15.0" fill="rgb(218,206,38)" rx="2" ry="2" />
+<text  x="1265.02" y="99.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (4,000,000 samples, 0.04%)</title><rect x="33.6" y="265" width="0.7" height="15.0" fill="rgb(228,46,20)" rx="2" ry="2" />
+<text  x="36.58" y="275.5" ></text>
+</g>
+<g >
+<title>__pthread_disable_asynccancel (458,000,000 samples, 4.16%)</title><rect x="829.8" y="361" width="84.4" height="15.0" fill="rgb(215,171,29)" rx="2" ry="2" />
+<text  x="832.82" y="371.5" >__pthread_disab..</text>
+</g>
+<g >
+<title>sock_recvmsg (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="329" width="4.4" height="15.0" fill="rgb(244,117,23)" rx="2" ry="2" />
+<text  x="1253.60" y="339.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="345" width="8.1" height="15.0" fill="rgb(219,196,14)" rx="2" ry="2" />
+<text  x="1048.37" y="355.5" ></text>
+</g>
+<g >
+<title>rcu_read_unlock_strict (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="361" width="2.2" height="15.0" fill="rgb(237,191,3)" rx="2" ry="2" />
+<text  x="1583.01" y="371.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (22,000,000 samples, 0.20%)</title><rect x="1582.2" y="329" width="4.1" height="15.0" fill="rgb(230,25,2)" rx="2" ry="2" />
+<text  x="1585.22" y="339.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="265" width="102.8" height="15.0" fill="rgb(227,48,25)" rx="2" ry="2" />
+<text  x="1118.38" y="275.5" >do_syscall_64</text>
+</g>
+<g >
+<title>security_socket_recvmsg (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="345" width="4.4" height="15.0" fill="rgb(252,17,49)" rx="2" ry="2" />
+<text  x="1253.60" y="355.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (174,000,000 samples, 1.58%)</title><rect x="2002.3" y="233" width="32.0" height="15.0" fill="rgb(221,87,26)" rx="2" ry="2" />
+<text  x="2005.26" y="243.5" >udp_..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="233" width="204.9" height="15.0" fill="rgb(253,34,40)" rx="2" ry="2" />
+<text  x="70.85" y="243.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="217" width="102.8" height="15.0" fill="rgb(226,170,38)" rx="2" ry="2" />
+<text  x="1118.38" y="227.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>do_syscall_64 (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="281" width="4.4" height="15.0" fill="rgb(227,169,32)" rx="2" ry="2" />
+<text  x="1253.60" y="291.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (192,000,000 samples, 1.74%)</title><rect x="1053.5" y="281" width="35.3" height="15.0" fill="rgb(230,67,33)" rx="2" ry="2" />
+<text  x="1056.48" y="291.5" >udp_s..</text>
+</g>
+<g >
+<title>udp_recvmsg (212,000,000 samples, 1.93%)</title><rect x="999.7" y="345" width="39.0" height="15.0" fill="rgb(236,164,39)" rx="2" ry="2" />
+<text  x="1002.68" y="355.5" >udp_re..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (68,000,000 samples, 0.62%)</title><rect x="49.8" y="297" width="12.5" height="15.0" fill="rgb(222,210,26)" rx="2" ry="2" />
+<text  x="52.79" y="307.5" ></text>
+</g>
+<g >
+<title>__skb_recv_udp (18,000,000 samples, 0.16%)</title><rect x="1218.2" y="345" width="3.3" height="15.0" fill="rgb(217,45,1)" rx="2" ry="2" />
+<text  x="1221.18" y="355.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="313" width="2.2" height="15.0" fill="rgb(210,76,52)" rx="2" ry="2" />
+<text  x="1583.01" y="323.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (90,000,000 samples, 0.82%)</title><rect x="1629.7" y="265" width="16.6" height="15.0" fill="rgb(213,167,11)" rx="2" ry="2" />
+<text  x="1632.75" y="275.5" >u..</text>
+</g>
+<g >
+<title>inet_recvmsg (36,000,000 samples, 0.33%)</title><rect x="821.0" y="313" width="6.6" height="15.0" fill="rgb(230,79,5)" rx="2" ry="2" />
+<text  x="823.98" y="323.5" ></text>
+</g>
+<g >
+<title>__local_bh_enable_ip (48,000,000 samples, 0.44%)</title><rect x="821.0" y="361" width="8.8" height="15.0" fill="rgb(253,6,33)" rx="2" ry="2" />
+<text  x="823.98" y="371.5" ></text>
+</g>
+<g >
+<title>import_single_range (76,000,000 samples, 0.69%)</title><rect x="1345.3" y="361" width="14.0" height="15.0" fill="rgb(205,4,5)" rx="2" ry="2" />
+<text  x="1348.30" y="371.5" ></text>
+</g>
+<g >
+<title>syscall_enter_from_user_mode (1,802,000,000 samples, 16.37%)</title><rect x="1660.0" y="361" width="331.9" height="15.0" fill="rgb(234,25,32)" rx="2" ry="2" />
+<text  x="1662.96" y="371.5" >syscall_enter_from_user_mode</text>
+</g>
+<g >
+<title>sock_recvmsg (124,000,000 samples, 1.13%)</title><rect x="1606.9" y="361" width="22.8" height="15.0" fill="rgb(251,152,32)" rx="2" ry="2" />
+<text  x="1609.90" y="371.5" >so..</text>
+</g>
+<g >
+<title>__libc_recv (44,000,000 samples, 0.40%)</title><rect x="1359.3" y="281" width="8.1" height="15.0" fill="rgb(212,167,16)" rx="2" ry="2" />
+<text  x="1362.30" y="291.5" ></text>
+</g>
+<g >
+<title>__libc_recv (26,000,000 samples, 0.24%)</title><rect x="1257.2" y="329" width="4.8" height="15.0" fill="rgb(251,204,18)" rx="2" ry="2" />
+<text  x="1260.23" y="339.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (444,000,000 samples, 4.03%)</title><rect x="914.2" y="345" width="81.8" height="15.0" fill="rgb(244,118,34)" rx="2" ry="2" />
+<text  x="917.20" y="355.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>__libc_recv (212,000,000 samples, 1.93%)</title><rect x="999.7" y="233" width="39.0" height="15.0" fill="rgb(205,41,7)" rx="2" ry="2" />
+<text  x="1002.68" y="243.5" >__libc..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (54,000,000 samples, 0.49%)</title><rect x="1991.9" y="345" width="10.0" height="15.0" fill="rgb(250,71,32)" rx="2" ry="2" />
+<text  x="1994.94" y="355.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (86,000,000 samples, 0.78%)</title><rect x="1606.9" y="329" width="15.8" height="15.0" fill="rgb(250,53,6)" rx="2" ry="2" />
+<text  x="1609.90" y="339.5" >_..</text>
+</g>
+<g >
+<title>__libc_recv (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="265" width="3.7" height="15.0" fill="rgb(206,220,48)" rx="2" ry="2" />
+<text  x="2037.32" y="275.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (76,000,000 samples, 0.69%)</title><rect x="1345.3" y="329" width="14.0" height="15.0" fill="rgb(217,0,47)" rx="2" ry="2" />
+<text  x="1348.30" y="339.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (212,000,000 samples, 1.93%)</title><rect x="999.7" y="297" width="39.0" height="15.0" fill="rgb(241,60,33)" rx="2" ry="2" />
+<text  x="1002.68" y="307.5" >__sys_..</text>
+</g>
+<g >
+<title>do_syscall_64 (16,000,000 samples, 0.15%)</title><rect x="1265.7" y="329" width="3.0" height="15.0" fill="rgb(239,174,29)" rx="2" ry="2" />
+<text  x="1268.71" y="339.5" ></text>
+</g>
+<g >
+<title>apparmor_socket_recvmsg (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="345" width="19.8" height="15.0" fill="rgb(229,171,51)" rx="2" ry="2" />
+<text  x="1229.65" y="355.5" >ap..</text>
+</g>
+<g >
+<title>__libc_recv (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="233" width="8.1" height="15.0" fill="rgb(205,183,22)" rx="2" ry="2" />
+<text  x="1048.37" y="243.5" ></text>
+</g>
+<g >
+<title>aa_sk_perm (130,000,000 samples, 1.18%)</title><rect x="1226.7" y="361" width="23.9" height="15.0" fill="rgb(222,126,1)" rx="2" ry="2" />
+<text  x="1229.65" y="371.5" >aa_..</text>
+</g>
+<g >
+<title>sock_recvmsg (20,000,000 samples, 0.18%)</title><rect x="996.0" y="329" width="3.7" height="15.0" fill="rgb(219,75,25)" rx="2" ry="2" />
+<text  x="999.00" y="339.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (104,000,000 samples, 0.94%)</title><rect x="1096.2" y="313" width="19.2" height="15.0" fill="rgb(211,200,22)" rx="2" ry="2" />
+<text  x="1099.22" y="323.5" >ud..</text>
+</g>
+<g >
+<title>ext4_file_write_iter (2,000,000 samples, 0.02%)</title><rect x="278.2" y="169" width="0.4" height="15.0" fill="rgb(241,144,41)" rx="2" ry="2" />
+<text  x="281.24" y="179.5" ></text>
+</g>
+<g >
+<title>__libc_recv (192,000,000 samples, 1.74%)</title><rect x="1053.5" y="297" width="35.3" height="15.0" fill="rgb(214,59,52)" rx="2" ry="2" />
+<text  x="1056.48" y="307.5" >__lib..</text>
+</g>
+<g >
+<title>vfs_write (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="185" width="0.4" height="15.0" fill="rgb(208,92,46)" rx="2" ry="2" />
+<text  x="1265.02" y="195.5" ></text>
+</g>
+<g >
+<title>__libc_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="57" width="0.4" height="15.0" fill="rgb(213,94,48)" rx="2" ry="2" />
+<text  x="281.24" y="67.5" ></text>
+</g>
+<g >
+<title>sockfd_lookup_light (108,000,000 samples, 0.98%)</title><rect x="1629.7" y="361" width="19.9" height="15.0" fill="rgb(245,2,23)" rx="2" ry="2" />
+<text  x="1632.75" y="371.5" >so..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (212,000,000 samples, 1.93%)</title><rect x="999.7" y="249" width="39.0" height="15.0" fill="rgb(212,24,50)" rx="2" ry="2" />
+<text  x="1002.68" y="259.5" >entry_..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (38,000,000 samples, 0.35%)</title><rect x="34.3" y="217" width="7.0" height="15.0" fill="rgb(239,19,53)" rx="2" ry="2" />
+<text  x="37.32" y="227.5" ></text>
+</g>
+<g >
+<title>__libc_recv (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="249" width="204.9" height="15.0" fill="rgb(238,211,51)" rx="2" ry="2" />
+<text  x="70.85" y="259.5" >__libc_recv</text>
+</g>
+<g >
+<title>ext4_file_write_iter (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="217" width="0.4" height="15.0" fill="rgb(218,175,37)" rx="2" ry="2" />
+<text  x="1265.02" y="227.5" ></text>
+</g>
+<g >
+<title>__libc_recv (30,000,000 samples, 0.27%)</title><rect x="272.7" y="265" width="5.5" height="15.0" fill="rgb(229,201,32)" rx="2" ry="2" />
+<text  x="275.71" y="275.5" ></text>
+</g>
+<g >
+<title>__check_heap_object (4,000,000 samples, 0.04%)</title><rect x="33.6" y="361" width="0.7" height="15.0" fill="rgb(248,196,52)" rx="2" ry="2" />
+<text  x="36.58" y="371.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="297" width="20.6" height="15.0" fill="rgb(248,20,15)" rx="2" ry="2" />
+<text  x="1589.27" y="307.5" >do..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (16,000,000 samples, 0.15%)</title><rect x="1265.7" y="313" width="3.0" height="15.0" fill="rgb(214,226,8)" rx="2" ry="2" />
+<text  x="1268.71" y="323.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (2,000,000 samples, 0.02%)</title><rect x="278.2" y="89" width="0.4" height="15.0" fill="rgb(248,59,52)" rx="2" ry="2" />
+<text  x="281.24" y="99.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (16,000,000 samples, 0.15%)</title><rect x="1262.8" y="329" width="2.9" height="15.0" fill="rgb(212,67,44)" rx="2" ry="2" />
+<text  x="1265.76" y="339.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="265" width="76.6" height="15.0" fill="rgb(224,173,24)" rx="2" ry="2" />
+<text  x="1271.66" y="275.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>inet_recvmsg (28,000,000 samples, 0.25%)</title><rect x="1221.5" y="329" width="5.2" height="15.0" fill="rgb(219,217,49)" rx="2" ry="2" />
+<text  x="1224.49" y="339.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (44,000,000 samples, 0.40%)</title><rect x="1359.3" y="265" width="8.1" height="15.0" fill="rgb(213,78,24)" rx="2" ry="2" />
+<text  x="1362.30" y="275.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="233" width="6.7" height="15.0" fill="rgb(226,23,49)" rx="2" ry="2" />
+<text  x="1041.74" y="243.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (54,000,000 samples, 0.49%)</title><rect x="1991.9" y="313" width="10.0" height="15.0" fill="rgb(216,125,52)" rx="2" ry="2" />
+<text  x="1994.94" y="323.5" ></text>
+</g>
+<g >
+<title>sock_recvmsg (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="345" width="14.0" height="15.0" fill="rgb(230,22,48)" rx="2" ry="2" />
+<text  x="1370.40" y="355.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (1,802,000,000 samples, 16.37%)</title><rect x="1660.0" y="297" width="331.9" height="15.0" fill="rgb(227,60,26)" rx="2" ry="2" />
+<text  x="1662.96" y="307.5" >udp_sub:10.0.2.</text>
+</g>
+<g >
+<title>&lt;std::net::tcp::TcpStream as std::io::Read&gt;::read (128,000,000 samples, 1.16%)</title><rect x="10.0" y="361" width="23.6" height="15.0" fill="rgb(217,181,12)" rx="2" ry="2" />
+<text  x="13.00" y="371.5" >&lt;s..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (192,000,000 samples, 1.74%)</title><rect x="1053.5" y="313" width="35.3" height="15.0" fill="rgb(211,217,2)" rx="2" ry="2" />
+<text  x="1056.48" y="323.5" >entry..</text>
+</g>
+<g >
+<title>sock_recvmsg (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="313" width="102.8" height="15.0" fill="rgb(253,35,49)" rx="2" ry="2" />
+<text  x="1118.38" y="323.5" >sock_recvmsg</text>
+</g>
+<g >
+<title>do_syscall_64 (1,802,000,000 samples, 16.37%)</title><rect x="1660.0" y="345" width="331.9" height="15.0" fill="rgb(230,78,50)" rx="2" ry="2" />
+<text  x="1662.96" y="355.5" >do_syscall_64</text>
+</g>
+<g >
+<title>__sys_recvfrom (44,000,000 samples, 0.40%)</title><rect x="1045.4" y="297" width="8.1" height="15.0" fill="rgb(238,178,53)" rx="2" ry="2" />
+<text  x="1048.37" y="307.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="249" width="20.6" height="15.0" fill="rgb(244,145,50)" rx="2" ry="2" />
+<text  x="1589.27" y="259.5" >ud..</text>
+</g>
+<g >
+<title>udp_recvmsg (36,000,000 samples, 0.33%)</title><rect x="821.0" y="329" width="6.6" height="15.0" fill="rgb(213,142,54)" rx="2" ry="2" />
+<text  x="823.98" y="339.5" ></text>
+</g>
+<g >
+<title>__libc_recv (104,000,000 samples, 0.94%)</title><rect x="1096.2" y="329" width="19.2" height="15.0" fill="rgb(244,14,41)" rx="2" ry="2" />
+<text  x="1099.22" y="339.5" >__..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (30,000,000 samples, 0.27%)</title><rect x="62.3" y="281" width="5.5" height="15.0" fill="rgb(249,166,21)" rx="2" ry="2" />
+<text  x="65.32" y="291.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (38,000,000 samples, 0.35%)</title><rect x="1088.8" y="345" width="7.0" height="15.0" fill="rgb(252,96,37)" rx="2" ry="2" />
+<text  x="1091.85" y="355.5" ></text>
+</g>
+<g >
+<title>__libc_write (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="153" width="0.4" height="15.0" fill="rgb(215,58,33)" rx="2" ry="2" />
+<text  x="2004.89" y="163.5" ></text>
+</g>
+<g >
+<title>ext4_buffered_write_iter (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="233" width="0.4" height="15.0" fill="rgb(229,5,48)" rx="2" ry="2" />
+<text  x="1265.02" y="243.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (104,000,000 samples, 0.94%)</title><rect x="1096.2" y="345" width="19.2" height="15.0" fill="rgb(215,152,10)" rx="2" ry="2" />
+<text  x="1099.22" y="355.5" >en..</text>
+</g>
+<g >
+<title>__sys_recvfrom (4,000,000 samples, 0.04%)</title><rect x="33.6" y="281" width="0.7" height="15.0" fill="rgb(209,165,35)" rx="2" ry="2" />
+<text  x="36.58" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="281" width="20.6" height="15.0" fill="rgb(235,77,49)" rx="2" ry="2" />
+<text  x="1589.27" y="291.5" >en..</text>
+</g>
+<g >
+<title>inet_recvmsg (20,000,000 samples, 0.18%)</title><rect x="996.0" y="345" width="3.7" height="15.0" fill="rgb(227,128,28)" rx="2" ry="2" />
+<text  x="999.00" y="355.5" ></text>
+</g>
+<g >
+<title>__libc_recv (2,000,000 samples, 0.02%)</title><rect x="1095.8" y="313" width="0.4" height="15.0" fill="rgb(254,11,8)" rx="2" ry="2" />
+<text  x="1098.85" y="323.5" ></text>
+</g>
+<g >
+<title>__skb_recv_udp (232,000,000 samples, 2.11%)</title><rect x="996.0" y="361" width="42.7" height="15.0" fill="rgb(251,61,52)" rx="2" ry="2" />
+<text  x="999.00" y="371.5" >__skb_r..</text>
+</g>
+<g >
+<title>do_syscall_64 (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="281" width="204.9" height="15.0" fill="rgb(249,208,31)" rx="2" ry="2" />
+<text  x="70.85" y="291.5" >do_syscall_64</text>
+</g>
+<g >
+<title>__ext4_mark_inode_dirty (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="329" width="0.4" height="15.0" fill="rgb(224,53,11)" rx="2" ry="2" />
+<text  x="1265.02" y="339.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (24,000,000 samples, 0.22%)</title><rect x="1250.6" y="265" width="4.4" height="15.0" fill="rgb(211,76,47)" rx="2" ry="2" />
+<text  x="1253.60" y="275.5" ></text>
+</g>
+<g >
+<title>security_socket_recvmsg (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="345" width="4.1" height="15.0" fill="rgb(248,77,25)" rx="2" ry="2" />
+<text  x="1249.55" y="355.5" ></text>
+</g>
+<g >
+<title>__getblk_gfp (2,000,000 samples, 0.02%)</title><rect x="278.2" y="345" width="0.4" height="15.0" fill="rgb(214,43,22)" rx="2" ry="2" />
+<text  x="281.24" y="355.5" ></text>
+</g>
+<g >
+<title>__find_get_block (2,000,000 samples, 0.02%)</title><rect x="278.2" y="361" width="0.4" height="15.0" fill="rgb(220,89,19)" rx="2" ry="2" />
+<text  x="281.24" y="371.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="233" width="4.1" height="15.0" fill="rgb(247,168,2)" rx="2" ry="2" />
+<text  x="1249.55" y="243.5" ></text>
+</g>
+<g >
+<title>__libc_recv (30,000,000 samples, 0.27%)</title><rect x="62.3" y="265" width="5.5" height="15.0" fill="rgb(205,223,16)" rx="2" ry="2" />
+<text  x="65.32" y="275.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (12,000,000 samples, 0.11%)</title><rect x="827.6" y="249" width="2.2" height="15.0" fill="rgb(212,95,13)" rx="2" ry="2" />
+<text  x="830.61" y="259.5" ></text>
+</g>
+<g >
+<title>__libc_recv (108,000,000 samples, 0.98%)</title><rect x="1226.7" y="233" width="19.8" height="15.0" fill="rgb(228,140,6)" rx="2" ry="2" />
+<text  x="1229.65" y="243.5" >__..</text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="249" width="102.8" height="15.0" fill="rgb(237,145,21)" rx="2" ry="2" />
+<text  x="1118.38" y="259.5" >entry_SYSCALL_64_af..</text>
+</g>
+<g >
+<title>do_syscall_64 (416,000,000 samples, 3.78%)</title><rect x="1268.7" y="313" width="76.6" height="15.0" fill="rgb(248,203,27)" rx="2" ry="2" />
+<text  x="1271.66" y="323.5" >do_syscall_64</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (90,000,000 samples, 0.82%)</title><rect x="1629.7" y="329" width="16.6" height="15.0" fill="rgb(218,58,5)" rx="2" ry="2" />
+<text  x="1632.75" y="339.5" >_..</text>
+</g>
+<g >
+<title>new_sync_write (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="249" width="0.4" height="15.0" fill="rgb(206,216,40)" rx="2" ry="2" />
+<text  x="2004.89" y="259.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (30,000,000 samples, 0.27%)</title><rect x="62.3" y="313" width="5.5" height="15.0" fill="rgb(232,0,45)" rx="2" ry="2" />
+<text  x="65.32" y="323.5" ></text>
+</g>
+<g >
+<title>__libc_recv (1,802,000,000 samples, 16.37%)</title><rect x="1660.0" y="313" width="331.9" height="15.0" fill="rgb(234,202,21)" rx="2" ry="2" />
+<text  x="1662.96" y="323.5" >__libc_recv</text>
+</g>
+<g >
+<title>__libc_recv (76,000,000 samples, 0.69%)</title><rect x="1345.3" y="297" width="14.0" height="15.0" fill="rgb(227,26,0)" rx="2" ry="2" />
+<text  x="1348.30" y="307.5" ></text>
+</g>
+<g >
+<title>generic_perform_write (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="249" width="0.4" height="15.0" fill="rgb(251,46,27)" rx="2" ry="2" />
+<text  x="1265.02" y="259.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (22,000,000 samples, 0.20%)</title><rect x="1582.2" y="345" width="4.1" height="15.0" fill="rgb(211,74,7)" rx="2" ry="2" />
+<text  x="1585.22" y="355.5" ></text>
+</g>
+<g >
+<title>__sys_recvfrom (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="313" width="204.9" height="15.0" fill="rgb(206,40,35)" rx="2" ry="2" />
+<text  x="70.85" y="323.5" >__sys_recvfrom</text>
+</g>
+<g >
+<title>sock_recvmsg (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="297" width="2.9" height="15.0" fill="rgb(211,148,32)" rx="2" ry="2" />
+<text  x="1580.06" y="307.5" ></text>
+</g>
+<g >
+<title>ext4_da_write_end (2,000,000 samples, 0.02%)</title><rect x="278.2" y="217" width="0.4" height="15.0" fill="rgb(244,45,40)" rx="2" ry="2" />
+<text  x="281.24" y="227.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (20,000,000 samples, 0.18%)</title><rect x="2034.3" y="281" width="3.7" height="15.0" fill="rgb(242,38,51)" rx="2" ry="2" />
+<text  x="2037.32" y="291.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="265" width="2.9" height="15.0" fill="rgb(218,213,17)" rx="2" ry="2" />
+<text  x="1580.06" y="275.5" ></text>
+</g>
+<g >
+<title>ksys_write (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="265" width="0.4" height="15.0" fill="rgb(234,131,38)" rx="2" ry="2" />
+<text  x="1265.39" y="275.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (38,000,000 samples, 0.35%)</title><rect x="1622.7" y="281" width="7.0" height="15.0" fill="rgb(221,29,17)" rx="2" ry="2" />
+<text  x="1625.75" y="291.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (76,000,000 samples, 0.69%)</title><rect x="1367.4" y="281" width="14.0" height="15.0" fill="rgb(236,48,46)" rx="2" ry="2" />
+<text  x="1370.40" y="291.5" ></text>
+</g>
+<g >
+<title>security_socket_recvmsg (134,000,000 samples, 1.22%)</title><rect x="1582.2" y="361" width="24.7" height="15.0" fill="rgb(234,10,23)" rx="2" ry="2" />
+<text  x="1585.22" y="371.5" >sec..</text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (46,000,000 samples, 0.42%)</title><rect x="41.3" y="345" width="8.5" height="15.0" fill="rgb(220,50,35)" rx="2" ry="2" />
+<text  x="44.32" y="355.5" ></text>
+</g>
+<g >
+<title>udp_recvmsg (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="345" width="102.8" height="15.0" fill="rgb(246,197,15)" rx="2" ry="2" />
+<text  x="1118.38" y="355.5" >udp_recvmsg</text>
+</g>
+<g >
+<title>inet_recvmsg (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="313" width="6.7" height="15.0" fill="rgb(207,15,22)" rx="2" ry="2" />
+<text  x="1041.74" y="323.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (2,000,000 samples, 0.02%)</title><rect x="278.2" y="73" width="0.4" height="15.0" fill="rgb(225,7,47)" rx="2" ry="2" />
+<text  x="281.24" y="83.5" ></text>
+</g>
+<g >
+<title>apparmor_socket_recvmsg (36,000,000 samples, 0.33%)</title><rect x="1250.6" y="361" width="6.6" height="15.0" fill="rgb(227,47,53)" rx="2" ry="2" />
+<text  x="1253.60" y="371.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="185" width="0.4" height="15.0" fill="rgb(250,173,3)" rx="2" ry="2" />
+<text  x="2004.89" y="195.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="233" width="2.2" height="15.0" fill="rgb(209,76,44)" rx="2" ry="2" />
+<text  x="1583.01" y="243.5" ></text>
+</g>
+<g >
+<title>__libc_recv (90,000,000 samples, 0.82%)</title><rect x="1629.7" y="281" width="16.6" height="15.0" fill="rgb(205,175,44)" rx="2" ry="2" />
+<text  x="1632.75" y="291.5" >_..</text>
+</g>
+<g >
+<title>do_syscall_64 (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="249" width="6.7" height="15.0" fill="rgb(253,101,6)" rx="2" ry="2" />
+<text  x="1041.74" y="259.5" ></text>
+</g>
+<g >
+<title>__libc_recv (38,000,000 samples, 0.35%)</title><rect x="1088.8" y="313" width="7.0" height="15.0" fill="rgb(234,192,8)" rx="2" ry="2" />
+<text  x="1091.85" y="323.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (68,000,000 samples, 0.62%)</title><rect x="49.8" y="329" width="12.5" height="15.0" fill="rgb(248,14,6)" rx="2" ry="2" />
+<text  x="52.79" y="339.5" ></text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (1,112,000,000 samples, 10.10%)</title><rect x="67.8" y="297" width="204.9" height="15.0" fill="rgb(254,199,52)" rx="2" ry="2" />
+<text  x="70.85" y="307.5" >__x64_sys_recvfrom</text>
+</g>
+<g >
+<title>__sys_recvfrom (22,000,000 samples, 0.20%)</title><rect x="1246.5" y="313" width="4.1" height="15.0" fill="rgb(206,167,16)" rx="2" ry="2" />
+<text  x="1249.55" y="323.5" ></text>
+</g>
+<g >
+<title>ksys_write (2,000,000 samples, 0.02%)</title><rect x="278.2" y="121" width="0.4" height="15.0" fill="rgb(246,203,9)" rx="2" ry="2" />
+<text  x="281.24" y="131.5" ></text>
+</g>
+<g >
+<title>__skb_recv_udp (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="345" width="6.7" height="15.0" fill="rgb(215,143,24)" rx="2" ry="2" />
+<text  x="1041.74" y="355.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (36,000,000 samples, 0.33%)</title><rect x="1038.7" y="201" width="6.7" height="15.0" fill="rgb(237,201,14)" rx="2" ry="2" />
+<text  x="1041.74" y="211.5" ></text>
+</g>
+<g >
+<title>__libc_recv (558,000,000 samples, 5.07%)</title><rect x="1115.4" y="233" width="102.8" height="15.0" fill="rgb(209,82,19)" rx="2" ry="2" />
+<text  x="1118.38" y="243.5" >__libc_recv</text>
+</g>
+<g >
+<title>__x64_sys_recvfrom (18,000,000 samples, 0.16%)</title><rect x="1646.3" y="345" width="3.3" height="15.0" fill="rgb(215,42,25)" rx="2" ry="2" />
+<text  x="1649.33" y="355.5" ></text>
+</g>
+<g >
+<title>do_syscall_64 (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="249" width="2.9" height="15.0" fill="rgb(211,164,29)" rx="2" ry="2" />
+<text  x="1580.06" y="259.5" ></text>
+</g>
+<g >
+<title>__libc_recv (16,000,000 samples, 0.15%)</title><rect x="1262.8" y="281" width="2.9" height="15.0" fill="rgb(207,200,49)" rx="2" ry="2" />
+<text  x="1265.76" y="291.5" ></text>
+</g>
+<g >
+<title>[unknown] (2,000,000 samples, 0.02%)</title><rect x="2001.9" y="137" width="0.4" height="15.0" fill="rgb(210,62,40)" rx="2" ry="2" />
+<text  x="2004.89" y="147.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (212,000,000 samples, 1.93%)</title><rect x="999.7" y="217" width="39.0" height="15.0" fill="rgb(249,229,28)" rx="2" ry="2" />
+<text  x="1002.68" y="227.5" >udp_su..</text>
+</g>
+<g >
+<title>__libc_recv (112,000,000 samples, 1.02%)</title><rect x="1586.3" y="265" width="20.6" height="15.0" fill="rgb(239,56,29)" rx="2" ry="2" />
+<text  x="1589.27" y="275.5" >__..</text>
+</g>
+<g >
+<title>sockfd_lookup_light (12,000,000 samples, 0.11%)</title><rect x="1580.0" y="329" width="2.2" height="15.0" fill="rgb(253,210,36)" rx="2" ry="2" />
+<text  x="1583.01" y="339.5" ></text>
+</g>
+<g >
+<title>_raw_spin_unlock_bh (12,000,000 samples, 0.11%)</title><rect x="827.6" y="345" width="2.2" height="15.0" fill="rgb(248,27,43)" rx="2" ry="2" />
+<text  x="830.61" y="355.5" ></text>
+</g>
+<g >
+<title>new_sync_write (2,000,000 samples, 0.02%)</title><rect x="1262.4" y="297" width="0.4" height="15.0" fill="rgb(210,229,34)" rx="2" ry="2" />
+<text  x="1265.39" y="307.5" ></text>
+</g>
+<g >
+<title>aa_sk_perm (16,000,000 samples, 0.15%)</title><rect x="1577.1" y="345" width="2.9" height="15.0" fill="rgb(210,211,2)" rx="2" ry="2" />
+<text  x="1580.06" y="355.5" ></text>
+</g>
+<g >
+<title>__libc_write (2,000,000 samples, 0.02%)</title><rect x="1262.0" y="105" width="0.4" height="15.0" fill="rgb(249,228,1)" rx="2" ry="2" />
+<text  x="1265.02" y="115.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (16,000,000 samples, 0.15%)</title><rect x="1265.7" y="281" width="3.0" height="15.0" fill="rgb(213,47,26)" rx="2" ry="2" />
+<text  x="1268.71" y="291.5" ></text>
+</g>
+<g >
+<title>udp_sub:10.0.2. (20,000,000 samples, 0.18%)</title><rect x="996.0" y="233" width="3.7" height="15.0" fill="rgb(210,184,4)" rx="2" ry="2" />
+<text  x="999.00" y="243.5" ></text>
+</g>
+<g >
+<title>entry_SYSCALL_64_after_hwframe (76,000,000 samples, 0.69%)</title><rect x="1345.3" y="313" width="14.0" height="15.0" fill="rgb(208,97,2)" rx="2" ry="2" />
+<text  x="1348.30" y="323.5" ></text>
+</g>
+</g>
+</svg>
