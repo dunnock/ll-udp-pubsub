@@ -13,4 +13,5 @@ for file in sys.argv[1:]:
     print(f"| p01    |   {results.quantile(0.01):5.2f}µs🦄|")
     print(f"| p9     |   {results.quantile(0.9):5.2f}µs  |")
     print(f"| p999   |   {results.quantile(0.999):5.2f}µs🐌|")
+
  

@@ -57,6 +57,11 @@ src: ./pages/1-motivation.md
 ---
 src: ./pages/2-low-latency.md
 ---
+
+---
+layout: section
+---
+# Network protocol
 ---
 src: ./pages/3-why-udp.md
 ---
@@ -94,3 +99,7 @@ title: What every programmmer should know
 - [What Every Programmer Should Know About Memory | Ulrich Drepper | Red Hat Inc](https://akkadia.org/drepper/cpumemory.pdf)
 
 <QRCode href="https://akkadia.org/drepper/cpumemory.pdf"/>
+
+- [How GPU Computing works | Stephen Jones | nVidia](https://www.nvidia.com/en-us/on-demand/session/gtcspring21-s31151/)
+
+<QRCode href="https://www.nvidia.com/en-us/on-demand/session/gtcspring21-s31151/"/>

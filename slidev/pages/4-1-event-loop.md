@@ -47,6 +47,8 @@ flowchart LR
 
 </p>
 
+> Use isolated cores via `isolcpus` kernel setting
+
 ```sh
 $ bin/receive -c ${LOCAL_IP}:3000 -n 100000
 ```
