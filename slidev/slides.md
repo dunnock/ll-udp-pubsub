@@ -29,7 +29,7 @@ css: unocss
 style: ./custom.css
 
 layout: intro-image-right
-image: ./static/racing.jpeg
+image: /static/racing.jpeg
 ---
 
 # Building low latency networking channel
@@ -41,15 +41,17 @@ __Volition Technologies__
 
 ---
 title: About me
+layout: intro-image-right
+image: /static/me.jpg
 ---
 
 # About me
 
 - 5+ years with Rust
 - 3 years in HFT
-- C++, Python, JavaScript in background
-- https://github.com/dunnock
-- @maxsparrow
+- JavaScript, Python, C, C++ .. in background
+- gh: [dunnock](https://github.com/dunnock)
+- t: [maxsparr0w](https://twitter.com/maxsparr0w)
 
 ---
 src: ./pages/1-motivation.md
@@ -86,9 +88,17 @@ src: ./pages/4-4-cooperative-loop.md
 ---
 src: ./pages/4-5-busy-loop.md
 ---
+
 ---
-TODO: ll-udp-pubsub usage example
+title: ll-udp-pubsub
 ---
+
+# [ll-udp-pubsub](https://github.com/dunnock/ll-udp-pubsub)
+
+- Generic statically linked message type via serde
+- Publisher maintains list of subscriptions
+- Subscriptions expire after 60 seconds
+- Subscriber actively maintains subscriptions
 
 ---
 title: What every programmmer should know
@@ -103,3 +113,5 @@ title: What every programmmer should know
 - [How GPU Computing works | Stephen Jones | nVidia](https://www.nvidia.com/en-us/on-demand/session/gtcspring21-s31151/)
 
 <QRCode href="https://www.nvidia.com/en-us/on-demand/session/gtcspring21-s31151/"/>
+
+- Q & A

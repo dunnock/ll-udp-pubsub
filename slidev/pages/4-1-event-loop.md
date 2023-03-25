@@ -47,14 +47,10 @@ flowchart LR
 
 </p>
 
-> Use isolated cores via `isolcpus` kernel setting
-
 ```sh
-$ bin/receive -c ${LOCAL_IP}:3000 -n 100000
-```
+$ bin/receive -c ${PRIVATE_IP}:3000 -n 100000 > 1_blocking.csv &
 
-```sh
-$ bin/send -c ${LOCAL_IP}:3000 -s ${LOCAL_IP}:3001 -t 1000 -n 1000000
+$ bin/send -c ${PRIVATE_IP}:3000 -s ${PRIVATE_IP}:3001 -t 1000 -n 1000000
 ```
 
 <!--
@@ -68,7 +64,7 @@ layout: center
 
 ## Measurement results
 
-![Blocking loop performance results](static/1_blocking.png)
+![Blocking loop performance results](/static/1_blocking.png)
 
 ---
 title: Performance counters
@@ -77,10 +73,8 @@ title: Performance counters
 ## Profile
 
 ```sh
-$perf stat taskset -c 1-4 bin/receive -c ${LOCAL_IP}:3000 -n 100000 --core 1
-```
+$ perf stat bin/receive -c ${PRIVATE_IP}:3000 -n 100000
 
-```sh
             339.31 msec task-clock                #    0.003 CPUs utilized          
             100329      context-switches          #  295.683 K/sec                  
                  2      cpu-migrations            #    5.894 /sec                   

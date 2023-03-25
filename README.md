@@ -1,27 +1,73 @@
-# UDP канал з мінімальними затримками
+# UDP pubsub channel with minimum latency
 
-Застосунки із реакцію не більше декільков десятків мікросекунд, наприклад HFT
+Extremely low latency overhead on top of UDP (1-2 microseconds)
 
-## 3. Код
+# Publisher and subscriber
 
-### 3.1. Send via UDP (./examples/send.rs)
-### 3.2. Receive via UDP (./examples/receive.rs)
-### 3.3. Блокуючий та неблокуючий режим
-### 3.4. Вимірювання
-### 3.5. Publisher and Subscriber (./examples/publisher.rs) (./examples/subscriber.rs)
 
-## Додатково
+```rust
+impl ManagedPublisher {
+    pub fn send<'r, Message: Serialize>(&mut self, msg: Message) -> Result<(), std::io::Error> { .. }
+}
+```
 
-- Цікаво було б поекспериментувати із eBPF, io_uring, linux mod, unikernel, open onload
+```rust
+impl<MessageHandler: Handler + Send + 'static> UdpSubscriber<MessageHandler> {
+    pub fn spawn(
+        self,
+        bind_to_core: Option<usize>,
+    ) -> Result<UdpSubscriberHandle<MessageHandler>, std::io::Error> { ... }
+}
+```
 
-Попередні зауваження
+# Usage example
 
-0. Хто я, чим займаємось - це повинно бути логічним підгрунтям для доповіді
-1. В яких умовах ми працюємо - чьому облако, чьому UDP
-2. Зменьшити об'єм
-3. Пояснити деякі терміни (park/unpark), покращіти початок - чьому в HFT такі специфічні вимоги,
-може ілюстративно?
-4. Порізати код, показувати те що має цінність для доповіді
-5. Презентація по результату випробовувань - по випрбовуванням меньше зайвого тексту, параметрів.. 
-показувати тільки те що має цінність для доповіді
+## Implement publisher
+
+```rust
+let (ctl, mut publisher) = PublisherController::create(config).unwrap();
+let handle = ctl.spawn().unwrap();
+
+let timeout = Duration::from_micros(opts.timeout_micros);
+for i in 0..i64::MAX {
+    publisher.send(i).unwrap();
+    std::thread::sleep(timeout);
+}
+
+handle.shutdown().unwrap();
+```
+
+## Implement subscriber
+
+```rust
+impl Handler for Receiver {
+    type Message = i64;
+    fn handle(&mut self, msg: Packet<Self::Message>, received_ts: i64) {
+        self.count.fetch_add(1, Ordering::Relaxed);
+        self.messages.push((msg.sent_ts, msg.data));
+    }
+}
+
+let count = Arc::new(AtomicUsize::default());
+let subscriber_config = UdpSubscriberConfig::new(opts.client_addr);
+let receiver = Receiver { count: count.clone() };
+let mut subscriber = UdpSubscriber::new(subscriber_config, receiver).unwrap();
+subscriber.set_nonblocking(true).unwrap();
+let controller_handle = subscriber.spawn_controller(opts.server_addr).unwrap();
+let subscriber_handle = subscriber.spawn(core(1)).unwrap();
+
+for i in 0..10 {
+    println!("{}", count.load(Ordering::Relaxed));
+    std::thread::sleep(Duration::from_secs(1)).unwrap();
+}
+
+controller_handle.shutdown();
+subscriber_handle.shutdown();
+let result = subscriber_handle.shutdown().unwrap();
+dbg!(result);
+```
+
+## Other approaches
+
+- eBPF, io_uring, linux mod, unikernel, open onload
 

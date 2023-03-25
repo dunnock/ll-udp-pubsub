@@ -28,7 +28,7 @@ title: Context switching impact
 
 # CS impact
 
-- ~9µs - In our case
+- ~8-14µs - In our case
 
 - ~8µs - [Linux perf event Features and Overhead | Vincent Weaver | University of Maine](https://web.eece.maine.edu/~vweaver/projects/perf_events/overhead/fastpath2013_perfevents.pdf#page=4)
 
@@ -40,9 +40,8 @@ title: Pin to CPU
 
 # Let's pin our receiver to CPU Core
 
-```rust {3}
+```rust {all|2}
 let channel: std::net::UdpSocket;
-//...
 core_affinity::set_for_current(core_id);
 loop {
     match channel.recv(&mut buf) /* .await */ {
@@ -54,11 +53,13 @@ loop {
 
 [core_affinity](https://docs.rs/core_affinity/latest/core_affinity/)
 
+> Use isolated cores via `isolcpus=1-7` kernel setting
+
 ---
 title: Measure
 ---
 
 # Measure and compare
 
-![Blocking loop pinned to core performance results](static/1_blocking_affinity.png)
+![Blocking loop pinned to core performance results](/static/1_blocking_affinity.png)
 

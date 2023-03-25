@@ -21,11 +21,6 @@ pub struct PublisherControllerConfig {
     pub addr: SocketAddr,
 }
 
-pub struct PublisherControllerHandle {
-    handle: JoinHandle<()>,
-    shutdown: Arc<AtomicBool>,
-}
-
 pub struct ManagedPublisher {
     publisher: UdpPublisher,
     recipients: Recipients,
@@ -42,13 +37,6 @@ impl ManagedPublisher {
         let barrier = Barrier::new();
         self.publisher
             .send(msg, self.recipients.iter(&barrier).map(|(addr, _)| addr))
-    }
-}
-
-impl PublisherControllerHandle {
-    pub fn shutdown(self) -> Result<(), Box<dyn Any + Send + 'static>> {
-        self.shutdown.store(true, Ordering::Relaxed);
-        self.handle.join()
     }
 }
 
@@ -71,7 +59,7 @@ impl PublisherController {
         ))
     }
 
-    pub fn spawn(self) -> Result<PublisherControllerHandle, std::io::Error> {
+    pub fn spawn(self) -> Result<ControllerHandle, std::io::Error> {
         let shutdown: Arc<AtomicBool> = Default::default();
         let shutdown_copy = shutdown.clone();
 
@@ -79,7 +67,7 @@ impl PublisherController {
             .name(format!("UDP subscriber {}", self.config.addr))
             .spawn(move || self.run(shutdown_copy))?;
 
-        Ok(PublisherControllerHandle { handle, shutdown })
+        Ok(ControllerHandle { handle, shutdown })
     }
 
     pub fn run(&self, stop: Arc<AtomicBool>) {

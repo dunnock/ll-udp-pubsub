@@ -6,8 +6,9 @@ layout: center
 # Teaser
 
 - What is low latency? 🏎
-- What problems are we trying to resolve? 🐉
+- What problems are we trying to solve? 🐉
 - Deep dive to microseconds level 🐠
+- Discover CPU cache and system scheduler impact 🔬
 - 🦀
 
 ---
@@ -28,13 +29,13 @@ layout: fact
 <strong>Low latency</strong>
 </td>
 <td rowspan=2>≠</td>
-<td align="right" width="40%">
-<strong>High load</strong>
+<td align="right" width="50%" nowrap="true">
+<strong>High performance</strong>
 </td>
 </tr>
 <tr>
-<td align="left" width="60%">
-↓time
+<td align="left">
+↓time ↓dev
 </td>
 <td align="right">
 ↑throughput
@@ -47,7 +48,7 @@ title: Why do we use Rust
 layout: fact
 ---
 
-Rust is ideal choice for low latency, it handles technical risks without sacrificing performance and provides access to native low level control over execution.
+Rust is ideal choice for low latency, it handles technical risks without sacrificing performance and provides access to low level control over execution.
 
 ---
 title: Event value
@@ -56,7 +57,7 @@ layout: fact
 
 When low latency matters?
 
-![Event value decline with time](static/event-time-value.png)
+![Event value decline with time](/static/event-time-value.png)
 
 <!-- швидко  -->
 

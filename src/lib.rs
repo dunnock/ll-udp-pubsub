@@ -48,6 +48,25 @@ pub trait Handler {
     fn handle(&mut self, msg: Packet<Self::Message>, received_ts: i64);
 }
 
+/// Publisher and Subscriber controller thread's handle
+pub struct ControllerHandle {
+    handle: std::thread::JoinHandle<()>,
+    shutdown: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl ControllerHandle {
+    pub fn shutdown(self) -> Result<(), Box<dyn std::any::Any + Send + 'static>> {
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.handle.join()
+    }
+}
+
+pub fn core(idx: usize) -> core_affinity::CoreId {
+    let cores = core_affinity::get_core_ids().expect("Failed to get list of cores");
+    cores[idx]
+}
+
 /// Pin current thread to core
 /// Note: all the created threads will inherit taskset
 pub fn pin_to_core(core_idx: usize) {

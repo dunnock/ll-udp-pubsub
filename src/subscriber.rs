@@ -2,13 +2,13 @@ use std::{
     any::Any,
     io::ErrorKind,
     net::{SocketAddr, UdpSocket},
-    sync::atomic,
+    sync::atomic::{self, Ordering},
     sync::{atomic::AtomicBool, Arc},
     thread::JoinHandle,
     time::Duration,
 };
 
-use crate::{timestamp, Handler, Packet, MTU};
+use crate::{timestamp, ControlMessage, ControllerHandle, Handler, Packet, MTU};
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_millis(1_000);
 
@@ -121,7 +121,7 @@ impl<MessageHandler: Handler + Send + 'static> UdpSubscriber<MessageHandler> {
         bind_to_core: Option<usize>,
     ) -> Result<UdpSubscriberHandle<MessageHandler>, std::io::Error> {
         let shutdown = self.shutdown_flag.clone();
-        let sock = self.sock.try_clone().unwrap();
+        let sock = self.sock.try_clone()?;
 
         let handle = std::thread::Builder::new()
             .name(format!("udp_sub:{}", self.config.client_addr))
@@ -137,5 +137,31 @@ impl<MessageHandler: Handler + Send + 'static> UdpSubscriber<MessageHandler> {
             shutdown,
             sock,
         })
+    }
+
+    pub fn spawn_controller(
+        &self,
+        server_addr: SocketAddr,
+    ) -> Result<ControllerHandle, std::io::Error> {
+        let shutdown_controller = Arc::new(AtomicBool::default());
+        let shutdown = shutdown_controller.clone();
+        let server_socket = self.sock.try_clone()?;
+        let handle = std::thread::Builder::new()
+            .name("udp_sub_controller".into())
+            .spawn(move || {
+                if let Err(err) = server_socket.connect(server_addr) {
+                    shutdown.store(true, Ordering::Relaxed);
+                    log::error!("Failed to connect to {} {err}", server_addr);
+                }
+                let subscribe = bincode::serialize(&ControlMessage::Subscribe).unwrap();
+                while !shutdown.load(Ordering::Relaxed) {
+                    if let Err(err) = server_socket.send(&subscribe) {
+                        shutdown.store(true, Ordering::Relaxed);
+                        log::error!("Failed to receive message {err}");
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            })?;
+        Ok(ControllerHandle { handle, shutdown })
     }
 }

@@ -66,26 +66,8 @@ fn main() {
     let messages_count = receiver.count.clone();
     let mut subscriber = UdpSubscriber::new(subscriber_config, receiver).unwrap();
     subscriber.set_nonblocking(opts.non_blocking).unwrap();
+    let controller_handle = subscriber.spawn_controller(opts.server_addr).unwrap();
     let subscriber_handle = subscriber.spawn(opts.core).unwrap();
-
-    // Messy implementation of controller for subscriber, just for illustration purposes
-    let shutdown_controller = Arc::new(AtomicBool::default());
-    let shutdown = shutdown_controller.clone();
-    let server_socket = subscriber_handle.socket().try_clone().unwrap();
-    let controller_handle = std::thread::spawn(move || {
-        if let Err(err) = server_socket.connect(opts.server_addr) {
-            shutdown.store(true, Ordering::Relaxed);
-            log::error!("Failed to connect to {} {err}", opts.server_addr);
-        }
-        let subscribe = bincode::serialize(&ControlMessage::Subscribe).unwrap();
-        while !shutdown.load(Ordering::Relaxed) {
-            if let Err(err) = server_socket.send(&subscribe) {
-                shutdown.store(true, Ordering::Relaxed);
-                log::error!("Failed to receive message {err}");
-            }
-            std::thread::sleep(Duration::from_secs(1));
-        }
-    });
 
     // Wait until client receives expected number of messages
     while messages_count.load(Ordering::Relaxed) < opts.number {

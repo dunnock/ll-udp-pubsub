@@ -30,7 +30,7 @@ title: Cooperative event-loop
 
 ## Measurement results
 
-![Cooperative loop performance results](static/2_cooperative_affinity.png)
+![Cooperative loop performance results](/static/2_cooperative_affinity.png)
 
 ---
 title: Cooperative event-loop
@@ -38,4 +38,4 @@ title: Cooperative event-loop
 
 ## Compare with blocking
 
-![Blocking loop performance results](static/2_cooperative_vs_blocking.png)
+![Blocking loop performance results](/static/2_cooperative_vs_blocking.png)
