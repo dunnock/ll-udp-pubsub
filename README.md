@@ -1,3 +1,5 @@
+(c) Volition Technologies 2023
+
 # UDP pubsub channel with minimum latency
 
 Extremely low latency overhead on top of UDP (1-2 microseconds)
