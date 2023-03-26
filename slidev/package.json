@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "slidev build",
+    "pages": "slidev build --base /ll-udp-pubsub/ --download",
     "dev": "slidev --open",
     "export": "slidev export"
   },
@@ -15,5 +16,8 @@
     "slidev-theme-dracula": "^0.1.0",
     "slidev-theme-dualboot": "^0.4.0",
     "slidev-theme-eloc": "^1.0.1"
+  },
+  "devDependencies": {
+    "playwright-chromium": "^1.32.1"
   }
 }
