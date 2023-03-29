@@ -23,18 +23,6 @@ sequenceDiagram
 ```
 
 ---
-title: Context switching impact
----
-
-# CS impact
-
-- ~8-14µs - In our case
-
-- ~8µs - [Linux perf event Features and Overhead | Vincent Weaver | University of Maine](https://web.eece.maine.edu/~vweaver/projects/perf_events/overhead/fastpath2013_perfevents.pdf#page=4)
-
-- ~3µs - [How long does it take to make a context switch? | Tsuna's blog](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
-
----
 title: Pin to CPU
 ---
 
@@ -52,6 +40,8 @@ loop {
 ```
 
 [core_affinity](https://docs.rs/core_affinity/latest/core_affinity/)
+
+[libc::sched_setaffinity](https://docs.rs/libc/latest/libc/fn.sched_setaffinity.html)
 
 > Use isolated cores via `isolcpus=1-7` kernel setting
 

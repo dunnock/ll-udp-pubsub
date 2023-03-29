@@ -5,7 +5,7 @@ layout: center
 
 # Traditional event-loop
 
-```rust
+```rust {all|1|3|4,5}
 let channel: std::net::UdpSocket;
 loop {
     match channel.recv(&mut buf) /* .await */ {

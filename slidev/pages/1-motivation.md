@@ -66,11 +66,11 @@ title: Applications
 layout: center
 ---
 
-# Applications
+# Low latency Applications
 
 - HFT
-- RTB
 - IoT
+- Video Streaming
 - Other realtime applications
 
 
