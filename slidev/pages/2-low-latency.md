@@ -13,7 +13,7 @@ layout: center
 
 # Assumptions
 
-- Sequence is less important than time
+- Sequence of events is less important than time
 - Allowance for losing messages
 - Maximum control over execution
 
