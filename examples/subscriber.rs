@@ -1,7 +1,7 @@
 use std::{
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -10,7 +10,7 @@ use std::{
 use clap::Parser;
 use ll_udp_pubsub::{
     subscriber::{UdpSubscriber, UdpSubscriberConfig},
-    ControlMessage, Handler, Packet,
+    Handler, Packet,
 };
 
 #[derive(clap::Parser)]
@@ -75,18 +75,14 @@ fn main() {
             "Received {} messages",
             messages_count.load(Ordering::Relaxed)
         );
-        if shutdown_controller.load(std::sync::atomic::Ordering::Relaxed) {
-            break;
-        }
         std::thread::sleep(Duration::from_millis(1000));
     }
 
     // Stop subscriber and controller
-    shutdown_controller.store(true, Ordering::Relaxed);
+    controller_handle.shutdown().unwrap();
+    log::info!("Controller was shutdown");
     let result = subscriber_handle.shutdown().unwrap();
     log::info!("Subscriber was shutdown");
-    controller_handle.join().unwrap();
-    log::info!("Controller was shutdown");
 
     // Print out csv with results
     println!("id,sent_ts,received_ts");

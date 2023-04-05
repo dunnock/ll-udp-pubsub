@@ -4,7 +4,7 @@ title: Busy loop
 
 # Busy loop
 
-```rust {all|10}
+```rust {all|10-12}
 let sock: std::net::UdpSocket;
 sock.set_nonblocking(true);
 loop {
@@ -14,7 +14,9 @@ loop {
             err.kind() == ErrorKind::TimedOut => { }
         Err(err) => handle_error(err),
     }
-    std::hint::spin_loop();
+    for i in 0..128 {
+        std::hint::spin_loop();
+    }
 }
 ```
 
@@ -71,4 +73,18 @@ $ perf stat taskset -c 1-4 bin/receive -c ${PRIVATE_IP}:3000 -n 100000 --non-blo
 title: Busy loop profiling
 ---
 
+## Profiling flame chart
+
+- <span class="green">green area</span> - time within busy loop handlers
+- <span class="blue">blue area</span> - time within linux kernel recv (syscall)
+
 ![Busy loop flame chart](/static/flamegraph.png)
+
+<style>
+.green {
+  color: #7DFF6E
+}
+.blue {
+  color: #6E7BFF
+}
+</style>

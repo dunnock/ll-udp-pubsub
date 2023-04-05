@@ -69,7 +69,7 @@ let result = subscriber_handle.shutdown().unwrap();
 dbg!(result);
 ```
 
-## Other approaches
+## Other approaches worth trying
 
-- eBPF, io_uring, linux mod, unikernel, open onload
+- eBPF, io_uring, linux mod, unikernel and open onload(complimentary)
 

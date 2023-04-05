@@ -5,14 +5,16 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread::JoinHandle,
-    time::Duration, any::Any,
+    time::Duration,
 };
 
 use scc::ebr::Barrier;
 use serde::Serialize;
 
-use crate::{publisher::UdpPublisher, timestamp, ChannelMetrics, ControlMessage, Recipients};
+use crate::{
+    publisher::UdpPublisher, timestamp, ChannelMetrics, ControlMessage, ControllerHandle,
+    Recipients,
+};
 
 pub struct PublisherControllerConfig {
     pub subscription_timeout: Duration,

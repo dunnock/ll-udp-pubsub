@@ -108,7 +108,9 @@ impl<MessageHandler: Handler> UdpSubscriber<MessageHandler> {
             #[cfg(feature = "cooperative_waiting")]
             std::thread::yield_now();
             #[cfg(not(feature = "cooperative_waiting"))]
-            std::hint::spin_loop();
+            for i in 0..128 {
+                std::hint::spin_loop();
+            }
         }
 
         self.handler
@@ -162,6 +164,9 @@ impl<MessageHandler: Handler + Send + 'static> UdpSubscriber<MessageHandler> {
                     std::thread::sleep(Duration::from_secs(1));
                 }
             })?;
-        Ok(ControllerHandle { handle, shutdown })
+        Ok(ControllerHandle {
+            handle,
+            shutdown: shutdown_controller,
+        })
     }
 }

@@ -8,6 +8,7 @@ author = "Maxim Vorobjov"
 
 [features]
 cooperative_waiting = []
+default = ["cooperative_waiting"]
 
 [dependencies]
 bincode = "1.1"    
