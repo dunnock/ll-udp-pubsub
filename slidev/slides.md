@@ -28,6 +28,11 @@ defaults:
 css: unocss
 style: ./custom.css
 
+layout: image
+image: /static/lobby.png
+---
+
+---
 layout: intro-image-right
 image: /static/racing.jpeg
 ---
@@ -48,7 +53,7 @@ image: /static/me.jpg
 # About me
 
 - 5+ years with Rust
-- 3 years in HFT
+- 3 years in HFT @ Volition
 - JavaScript, Python, C, C++ .. in background
 - gh: [dunnock](https://github.com/dunnock)
 - t: [maxsparr0w](https://twitter.com/maxsparr0w)
@@ -115,3 +120,8 @@ title: What every programmmer should know
 <QRCode href="https://www.nvidia.com/en-us/on-demand/session/gtcspring21-s31151/"/>
 
 - Q & A
+
+---
+layout: image
+image: /static/lobby.png
+---
